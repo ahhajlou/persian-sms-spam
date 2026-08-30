@@ -10,4 +10,5 @@ wheels/
 .venv
 
 parsbert_spam_model/
-parsbert_spam_final
+parsbert_spam_final/
+data/

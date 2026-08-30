@@ -1,5 +1,5 @@
-import torch
 import litert_torch
+import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 model_path = "./parsbert_spam_final"
@@ -16,6 +16,7 @@ edge_model = litert_torch.convert(model, sample_inputs)
 
 # Sanity check: compare PyTorch output vs converted output
 import numpy as np
+
 with torch.no_grad():
     torch_output = model(*sample_inputs).logits
 edge_output = edge_model(*sample_inputs)

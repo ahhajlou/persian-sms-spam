@@ -1,5 +1,5 @@
-from transformers import AutoTokenizer, AutoModel
 import torch
+from transformers import AutoModel, AutoTokenizer
 
 model_name = "HooshvareLab/bert-fa-zwnj-base"  # ParsBERT v3, handles ZWNJ correctly
 tokenizer = AutoTokenizer.from_pretrained(model_name)

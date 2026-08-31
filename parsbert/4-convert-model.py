@@ -9,7 +9,7 @@ model.eval()
 
 # Build a sample input matching your fine-tuning max_length
 sample_text = "این یک متن نمونه است"
-inputs = tokenizer(sample_text, return_tensors="pt", padding="max_length", truncation=True, max_length=64)
+inputs = tokenizer(sample_text, return_tensors="pt", padding="max_length", truncation=True, max_length=128)
 sample_inputs = (inputs["input_ids"], inputs["attention_mask"])
 
 edge_model = litert_torch.convert(model, sample_inputs)

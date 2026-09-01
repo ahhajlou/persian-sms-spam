@@ -26,19 +26,20 @@ except ImportError:  # progress bar is a nicety, not a hard dependency
         return iterable
 
 _normalizer = Normalizer()
-# BUG FIX: hazm's module-level `word_tokenize(text)` convenience function
-# calls `WordTokenizer().tokenize(text)` internally — i.e. it builds a
-# brand new WordTokenizer (which loads a multi-MB lexicon file from disk)
-# on every single call. Looping that over ~2000 rows means ~2000 cold
-# lexicon loads, which is what looked like a hang. Instantiating it once
-# here and reusing `.tokenize()` fixes it.
 _word_tokenizer = WordTokenizer()
-_url_re = re.compile(r"https?://\S+|www\.\S+")
+_url_re = re.compile(
+    r"(?:https?://[^\s]+)"
+    r"|(?:www\.[^\s]+)"
+    r"|(?:\b[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z0-9\-]+)+(?:/[^\s]*)?)"
+)
 
 
 def preprocess(text: str) -> str:
-    text = _normalizer.normalize(text)
+    # Same fix as baseline_tfidf.py: mask URLs before normalizing, not after —
+    # otherwise hazm's normalize() breaks the URL apart with spaces first.
     text = _url_re.sub(" URLTOKEN ", text)
+    text = re.sub(r"\d+", " NUM_TOKEN ", text)
+    text = _normalizer.normalize(text)
     text = text.replace("\n", " ")
     tokens = _word_tokenizer.tokenize(text)
     return " ".join(tokens)

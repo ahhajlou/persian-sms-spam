@@ -23,15 +23,23 @@ from sklearn.metrics import classification_report, confusion_matrix
 from hazm import Normalizer
 
 _normalizer = Normalizer()
-_url_re = re.compile(r"https?://\S+|www\.\S+")
+_url_re = re.compile(
+    r"(?:https?://[^\s]+)"
+    r"|(?:www\.[^\s]+)"
+    r"|(?:\b[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z0-9\-]+)+(?:/[^\s]*)?)"
+)
 
 
 def preprocess(text: str) -> str:
-    text = _normalizer.normalize(text)
-    # Collapse URLs to a single token instead of dropping them —
-    # "contains a link" is itself a strong spam signal, but the exact
-    # URL is noise that would blow up the n-gram vocabulary.
+    # Mask URLs BEFORE normalizing: hazm's normalize() inserts spaces
+    # around punctuation (e.g. "https://x.ir" -> "https: / / x. ir"),
+    # which breaks the URL apart before a regex could ever match it as
+    # one token. Masking first, then normalizing, keeps URLTOKEN intact
+    # and collapses domain-specific text into one generic signal instead
+    # of the model memorizing individual spam domains.
     text = _url_re.sub(" URLTOKEN ", text)
+    text = re.sub(r"\d+", " NUM_TOKEN ", text)
+    text = _normalizer.normalize(text)
     return text
 
 

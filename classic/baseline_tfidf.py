@@ -104,6 +104,26 @@ def predict(model_path, text):
     score = pipe.decision_function([preprocess(text)])[0]
     print(f"label={pred}  score={score:.3f}")
 
+def export_to_mobile(model_path, json_path):
+    # Load the trained pipeline
+    pipe = joblib.load(model_path)
+    vectorizer = pipe.named_steps["tfidf"]
+    clf = pipe.named_steps["clf"]
+    
+    # Extract the core components
+    export_data = {
+        "vocab": vectorizer.vocabulary_,          # Dict: ngram -> index
+        "weights": clf.coef_[0].tolist(),         # SVM weights (for binary classification)
+        "bias": float(clf.intercept_[0]),         # SVM bias/intercept
+        "classes": clf.classes_.tolist()          # e.g., ["ham", "spam"]
+    }
+    
+    # Save to JSON
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(export_data, f, ensure_ascii=False)
+    
+    print(f"✅ Successfully exported to {json_path}")
+
 
 if __name__ == "__main__":
     cmd = sys.argv[1]
@@ -113,5 +133,7 @@ if __name__ == "__main__":
         test(sys.argv[2], sys.argv[3])
     elif cmd == "predict":
         predict(sys.argv[2], sys.argv[3])
+    elif cmd == "export":
+        export_to_mobile(sys.argv[2], sys.argv[3])
     else:
         print(__doc__)

@@ -124,7 +124,9 @@ def test(model_path, data_path):
 
 def predict(model_path, text):
     model = fasttext.load_model(model_path)
+    t2 = time.time()
     label, prob = model.predict(preprocess(text))
+    print(f"Prediction took {time.time() - t2:.1f}s")
     print(f"label={label[0].replace('__label__', '')}  prob={prob[0]:.3f}")
 
 

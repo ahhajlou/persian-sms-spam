@@ -9,7 +9,8 @@ Generates, from the installed hazm in this venv:
   - hazm_fixture.json         curated + deterministic-fuzz inputs -> output of
                               spam_common.pipeline (each stage and final) and
                               the model score, consumed by the Kotlin JVM parity test
-  - spam_model.json           TF-IDF + Linear SVM weights and pipelineVersion
+  - spam_model.json           TF-IDF + Linear SVM weights, pipelineVersion and the
+                              URL/number mask patterns
 
 Then SELF-VERIFIES a faithful Python port of the same algorithm (consuming only
 the exported data, mirroring what the Kotlin port will do) against real hazm
@@ -28,7 +29,7 @@ import sys
 import joblib
 from hazm import Normalizer, WordTokenizer
 
-from spam_common.pipeline import PIPELINE_VERSION, preprocess_stages
+from spam_common.pipeline import NUMBER_RE, PIPELINE_VERSION, URL_RE, preprocess_stages
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +331,15 @@ def build_battery(seed: int = 20260910) -> list:
         "کارت مبدا: \u200e6037-99**-****-1234",
         "https://example.ir/login/12345 و Account.aspx?Req=12345",
         "کد تخفیف 20 درصدی، خرید رمز ارز",
+        # spam_common.pipeline.mask_urls
+        "HTTPS://BANK.IR/X و tg://resolve?domain=x",
+        "سایتgoogle.com را ببینید",
+        "لینک:https://x.ir،سریع",
+        "https://x.ir/a?b=1\u200cکلیک",
+        "(see x.ir). «y.ir»",
+        "x.ir:8080/path و https://my.example.ir/dlp?id=main&ph=09121234567",
+        "عدد 2.5 و تاریخ 1403.05.01 و ساعت 14:30",
+        "vmess://eyJhZGQiOiIxMDQuMjAuMjYuMjQxIn0=",
     ]
     rng = random.Random(seed)
     letters = "آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیینمی"
@@ -434,7 +444,14 @@ def main() -> int:
             f, ensure_ascii=False, indent=0,
         )
     with open(out_assets + "/spam_model.json", "w", encoding="utf-8") as f:
-        json.dump({**export_model(pipe), "pipelineVersion": PIPELINE_VERSION}, f, ensure_ascii=False, indent=0)
+        json.dump({
+            **export_model(pipe),
+            "pipelineVersion": PIPELINE_VERSION,
+            # The URL and number masks as data, so Kotlin can load them instead of
+            # copying them (Java regex syntax; the URL pattern is case-insensitive).
+            "urlPattern": URL_RE.pattern,
+            "numberPattern": NUMBER_RE.pattern,
+        }, f, ensure_ascii=False, indent=0)
 
     sizes = {
         "words": len(words_full), "words_positive": len(words_positive), "verbs": len(verbs),

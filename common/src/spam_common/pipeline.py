@@ -22,12 +22,24 @@ from spam_common.anonymize import anonymize
 # 2: anonymize added in front
 # 3: anonymize fixes (emails need a domain, URI secrets, no keyword matches
 #    inside placeholders or links, values on the next line, Luhn for bare cards)
-PIPELINE_VERSION = 3
+# 4: URL fixes (any scheme in any case, domains right after Persian text,
+#    links end at Persian text or trailing punctuation, bare domains need a
+#    letter TLD so numbers like 2.5 are not links)
+PIPELINE_VERSION = 4
 
+# A link ends at whitespace, Persian/Arabic text (U+0600-U+06FF, which also
+# covers «،» «؛» «؟»), ZWNJ, bidi marks or guillemets, and never on trailing
+# punctuation, so "x.ir،سریع" and "(see x.ir)." keep the words around the link.
+_URL_CHAR = r"[^\s\u0600-\u06FF\u200c-\u200f\u202a-\u202e«»]"
+_URL_TAIL = _URL_CHAR + r"*(?<![.,!?:;'\")])"
 URL_RE = re.compile(
-    r"(?:https?://[^\s]+)"
-    r"|(?:www\.[^\s]+)"
-    r"|(?:\b[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z0-9\-]+)+(?:/[^\s]*)?)"
+    # scheme://..., any scheme (https, HTTPS, vless, tg, ...)
+    r"(?<![A-Za-z0-9+.\-])[a-z][a-z0-9+.\-]*://" + _URL_TAIL
+    # www.... or a bare domain with a letter TLD, optionally with a port and
+    # path; may follow Persian text directly ("سایتgoogle.com").
+    + r"|(?<![A-Za-z0-9\-.])(?:www\.)?[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*\.[a-z]{2,}(?![a-z0-9\-])"
+    + r"(?::\d+)?(?:[/?#]" + _URL_TAIL + r")?",
+    re.I,
 )
 NUMBER_RE = re.compile(r"\d+")
 

@@ -24,10 +24,10 @@ results can be compared directly. Latest results on 219 unseen test messages:
 
 | Model | Accuracy | Macro F1 | Missed spam | Real messages blocked |
 |---|---|---|---|---|
-| ParsBERT | 0.982 | 0.978 | 2 | 2 |
 | fastText | 0.977 | 0.972 | 3 | 2 |
+| ParsBERT | 0.973 | 0.967 | 2 | 4 |
 | TF-IDF | 0.973 | 0.966 | 3 | 3 |
-| fastText quantized | 0.932 | 0.919 | 3 | 12 |
+| fastText quantized | 0.941 | 0.929 | 3 | 10 |
 
 For a spam filter, "real messages blocked" is the costliest error: those are messages
 the user never sees.
@@ -145,7 +145,8 @@ raw SMS → anonymize → mask URLs → mask numbers → hazm normalize → mode
   `[NATID]` (national IDs are detected by their check digit), so the model learns
   "this is an OTP message", not the code itself. `common/tests/test_anonymize.py` holds
   the cases it must mask and must leave alone; add one for every mistake you find.
-- **mask URLs / numbers** turns remaining links and numbers into `URLTOKEN` and `NUM_TOKEN`.
+- **mask URLs / numbers** turns links (any scheme, `www.`, or a bare domain like `t.me/x`)
+  and remaining numbers into `URLTOKEN` and `NUM_TOKEN`.
 - **hazm** normalizes Persian text (letters, digits, spacing, half-spaces).
 
 The Android app runs the same steps in Kotlin. `make export-android` writes a fixture with

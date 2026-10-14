@@ -28,7 +28,7 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment regex-label
+        export-android export-tflite label augment regex-label anonymize
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -47,6 +47,10 @@ split: $(TRAIN) $(TEST) ## Build the shared, deduplicated train/test split from 
 
 label: ## Open the label viewer GUI on DATA
 	$(DATAPREP) data-prep/label_viewer_gui.py $(DATA)
+
+anonymize: ## Mask passwords, IDs, cards, phones... in IN -> <IN>_anon.jsonl
+	$(if $(IN),,$(error Set IN=path/to/export.jsonl))
+	$(COMMON) -m spam_common.anonymize $(IN)
 
 regex-label: ## First-round label IN with the regex rules -> <IN>_regex.jsonl
 	$(if $(IN),,$(error Set IN=path/to/export.jsonl))

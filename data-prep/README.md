@@ -3,11 +3,18 @@
 From the repo root:
 
 ```bash
-make regex-label IN=data/phone/export.jsonl  # first-round labels -> export_regex.jsonl
+make anonymize IN=data/phone/export.jsonl    # mask sensitive data -> export_anon.jsonl
+make regex-label IN=data/phone/export_anon.jsonl  # first-round labels -> export_anon_regex.jsonl
 make label                                  # label viewer GUI on data/sms_labeled.jsonl
 make label DATA=data/other.jsonl            # ...or on another file
 make augment N=200                          # synthetic spam via a local Ollama model
 ```
+
+`anonymize` (in `common`, `spam_common.anonymize`) replaces passwords, usernames,
+OTP/tracking codes, national IDs, card/IBAN/account numbers, balances, phone numbers
+and emails with placeholders such as `[PASSWORD]` or `[CARD]`, and turns phone-number
+senders into stable `PHONE_<hash>` pseudonyms. It is rule-based: person names and
+street addresses are not detected.
 
 `regex_label.py` labels a message spam if any SpamBlocker blacklist rule in
 `data/regex_rules.json` matches it; everything else is ham. It never overwrites an

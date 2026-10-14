@@ -95,6 +95,40 @@ make export-android ANDROID_MODULE=/path/to/NoSpam/core/ml   # TF-IDF model + ha
 make export-tflite                                           # ParsBERT → models/parsbert_spam.tflite
 ```
 
+## Train your own model
+
+The SMS dataset behind the published model is private and is not in this repo (see
+[Privacy](#privacy)). You can build the NoSpam app without it, since NoSpam ships the trained
+weights. To train a model yourself, use your own messages:
+
+1. **Export your SMS** into `data/<phone>/`: NoSpam's Export screen writes
+   `sms_export_<time>.jsonl`; an adb dump works too (step 0 below). Each row needs a `text` field.
+2. **Anonymize:** `make anonymize IN=data/<phone>/sms_export_<time>.jsonl`.
+3. **Label.** You have no model yet, so either:
+   - `make regex-label IN=...` with your own spam rules in `data/regex_rules.json`
+     (`{"rules": [{"pattern": "...", "isBlacklist": true}, ...]}`, as SpamBlocker exports them),
+     then check the labels with `make label`, or
+   - label every message by hand: `make label DATA=data/<phone>/sms_export_<time>_anon.jsonl`
+     (the **Label** filter's **null** option shows the unlabelled ones).
+4. **Create the dataset:** `make merge IN=<reviewed file>` writes `data/sms_labeled.jsonl`.
+5. **Train and score:** `make test-tfidf` trains only the model the phone uses; `make test-all`
+   trains all three (ParsBERT is slow without a GPU).
+6. **Next exports:** your model can now give the first-round labels (`make model-label`, below).
+
+### Use your model in NoSpam
+
+```bash
+make export-android ANDROID_MODULE=/path/to/NoSpam/core/ml
+```
+
+writes your weights and a test fixture into your NoSpam checkout; then build NoSpam as usual.
+
+**Not yet possible:** NoSpam's on-device preprocessing is still at pipeline version 1, while
+this repo is at version 4. A model exported now fails NoSpam's parity test and would see
+different input on the phone than in training. The shared Rust core in
+[docs/preprocessing-core-plan.md](docs/preprocessing-core-plan.md) fixes this; until then, keep
+the model NoSpam ships.
+
 ## Adding data from a phone
 
 Every step reads one file and writes a new one next to it, so you can always go back to
@@ -169,7 +203,9 @@ raw SMS → anonymize → mask URLs → mask numbers → hazm normalize → mode
 
 The Android app runs the same steps in Kotlin. `make export-android` writes a fixture with
 the expected output of each step for some 500 test inputs, which the app's JVM test
-checks, so the phone and training can't drift apart silently. Bump `PIPELINE_VERSION` in
+checks, so the phone and training can't drift apart silently. The Kotlin port is currently
+at pipeline version 1; [docs/preprocessing-core-plan.md](docs/preprocessing-core-plan.md)
+replaces it with a Rust core shared by both projects. Bump `PIPELINE_VERSION` in
 `pipeline.py` whenever a change alters the output; changing the pipeline retrains every
 model.
 
@@ -180,7 +216,9 @@ model.
   inflate the scores.
 - It keeps the ham/spam ratio in both parts (stratified, 80/20, fixed seed).
 - Each model's report is saved to `models/results/<model>.json`; `make compare` shows them
-  side by side.
+  side by side and marks with `*` any result scored under an older pipeline version.
+- Only TF-IDF runs on the phone. `make test-tfidf` is enough when you change the data or the
+  pipeline; train fastText and ParsBERT only when you want to compare.
 
 ## Privacy
 
@@ -188,3 +226,7 @@ model.
 `.gitignore` and must never be committed or published. The anonymizer is rule-based: it
 does not detect person names or street addresses, so check a sample by hand before
 sharing any data.
+
+The only trained artifact that is published is the TF-IDF weights that `make export-android`
+writes into NoSpam (`spam_model.json`): the app needs them on the phone. The dataset itself
+stays private.

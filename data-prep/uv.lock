@@ -570,10 +570,19 @@ version = "0.1.0"
 source = { editable = "../common" }
 dependencies = [
     { name = "hazm" },
+    { name = "spam-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "hazm", specifier = ">=0.12.1" }]
+requires-dist = [
+    { name = "hazm", specifier = ">=0.12.1" },
+    { name = "spam-core", editable = "../core/spam-core-py" },
+]
+
+[[package]]
+name = "spam-core"
+version = "0.1.0"
+source = { editable = "../core/spam-core-py" }
 
 [[package]]
 name = "tqdm"

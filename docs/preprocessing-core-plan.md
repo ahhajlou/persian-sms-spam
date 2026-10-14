@@ -1,6 +1,6 @@
 # Plan: one Rust preprocessing core for training and the NoSpam app
 
-Status: Phase 1 done.
+Status: Phase 2 done.
 
 ## How to work through this plan
 
@@ -50,8 +50,8 @@ raw SMS ─► [ Rust core: shared by both projects ]                  ─► [ 
 
 - persian-sms-spam must be public (it has no git remote yet). Its history was checked:
   no data or model files were ever committed; the deleted notebook has no saved outputs.
-- It needs a license. GPL-3.0 (like NoSpam), MIT and Apache-2.0 all work with NoSpam.
-  `rules/hazm.json` comes from hazm (MIT): keep its copyright notice.
+- License: GPL-3.0, like NoSpam (chosen 2026-10-14). `rules/hazm.json` comes from hazm (MIT):
+  keep its copyright notice (`rules/HAZM-LICENSE.txt`).
 
 ## What is public, what stays private
 
@@ -71,10 +71,9 @@ raw SMS ─► [ Rust core: shared by both projects ]                  ─► [ 
   source code, and the dataset is personal data under no license. Good practice (and what
   OSI's Open Source AI Definition asks for) is a description of the data in the README instead:
   where it comes from, size, how it was labeled, why it is not published.
-- **Postponed, decide before publishing:** the weights contain short text fragments from the
-  messages. 14,977 of the 33,325 n-grams in today's `spam_model.json` occur in only one
-  training message, and the anonymizer does not mask names. `min_df=2` in
-  `classic/baseline_tfidf.py` would drop all of them; check that accuracy holds.
+- **Weights privacy:** the weights contain short text fragments (2-4 character n-grams) from the
+  messages, and the anonymizer does not mask names. Not changed for now; see "Future: min_df"
+  at the end.
 
 ## Workflow after the migration
 
@@ -223,6 +222,25 @@ Done when: no unexplained differences, and v5 TF-IDF is at least as good as v4 T
 Phase 0 baseline (v4, TF-IDF, 1,756 test messages): accuracy 0.977, macro F1 0.976,
 spam F1 0.969, 16 missed spam, 24 blocked ham.
 
+Phase 2 results (2026-10-14):
+
+- `make core-diff` compares the Rust core with the Python pipeline as of commit `45fe347`
+  (read from git, so it still runs after the Python rules were deleted): 512 battery inputs,
+  150,000 fuzz inputs (seed 7) and all 31,235 distinct local messages. No unexpected differences.
+  `full` equals real hazm; `rules` equals the export script's port with empty word lists; n-grams
+  equal sklearn's `char_wb`. The 2,000-character cut changed none of the local messages.
+- Intended differences (a difference counts as intended only if it disappears when the
+  characters below are replaced, so nothing else hides behind them). No local message is affected:
+  - Digits of other scripts (fullwidth, Devanagari, ...): the anonymizer's classes are `[0-9]`,
+    where Python's `\d` matched every decimal digit. (The number mask still uses `\p{Nd}`.)
+  - U+0130 (İ) and U+0131 (ı): Python's `re.I` lets them match `i`; Rust's `(?i)` does not.
+    Affects the URL, keyword and IBAN rules when such a letter touches a match.
+- TF-IDF, same split as the baseline (7,023 train, 1,756 test): v5 accuracy 0.9772 (same), macro F1
+  0.97562 (v4: 0.97564), 17 missed spam / 23 blocked ham (v4: 16 / 24). Both make 40 errors; one
+  message moved from blocked ham to missed spam.
+- `export_android_assets.py` lost the hazm port and now writes only the model (with its `pipeline`)
+  and a fixture of stage outputs, n-grams and scores. Its output is not shippable before Phase 3.
+
 ### Phase 3: the phone uses the core
 
 1. `spam-core-jni`: `pipelineVersion()`, `normalizerMode()`, `ngrams(text)`, `stages(text)`
@@ -367,3 +385,22 @@ for n in 2..=4 slide a window, and a word shorter than n gives one window and en
 | Core in this repo | A third consumer (iOS, a server) appears: move `core/` to its own repo |
 | Hand-written JNI | The API grows to objects and callbacks: switch to UniFFI |
 | `rules` normalizer | A larger labeled set shows the word lists help: switch to `full` |
+
+## Future: min_df (not decided, keep `min_df=1` for now)
+
+`min_df` is the number of different training messages an n-gram must appear in to be kept in
+the model. Today it is 1, so the published weights include n-grams that come from a single
+message, often pieces of names. Measured on 2026-10-14 (v5 pipeline, TF-IDF, nothing changed):
+
+| min_df | Errors, test set (1,756) | Errors per CV repeat (8,779, 10x5-fold) | n-grams | Export size |
+|---|---|---|---|---|
+| 1 (today) | 40 | 302.7 | 50,033 | 2.7 MB |
+| 2 | 40 | 300.9 (-1.8, noise) | 28,251 | 1.6 MB |
+| 3 | 38 | 300.8 (-1.9, noise) | 21,552 | 1.2 MB |
+| 5 | 43 | 295.9 (-6.8, p = 0.14) | 15,978 | 0.9 MB |
+
+- 2 or 3 cost no accuracy, make the model 40-55% smaller and drop every n-gram seen in only
+  one message (~23,900 when trained on all data). 5 is unclear (CV better, test set worse).
+- Changing it does not change the pipeline (no `PIPELINE_VERSION` bump), only the model
+  file: set `min_df` in `classic/baseline_tfidf.py`, retrain, re-export.
+- Decide before the repos are published; the user wants to think about it first.

@@ -11,9 +11,12 @@ N              ?= 200
 FORCE          ?=
 MODEL          ?= tfidf
 IN             ?=
+REF_REV        ?=
 
-# Changing a preprocessing rule retrains every model and rebuilds the split.
-PIPELINE := common/src/spam_common/pipeline.py common/src/spam_common/anonymize.py
+# Changing a preprocessing rule (the Rust core's code or rules) makes every model out of date
+# and rebuilds the split; `make` retrains only the models you ask for.
+PIPELINE := common/src/spam_common/pipeline.py common/src/spam_common/anonymize.py \
+            $(wildcard core/spam-core/src/*.rs) $(wildcard core/spam-core/rules/*.toml core/spam-core/rules/*.json)
 
 TRAIN  := data/train.jsonl
 TEST   := data/test.jsonl
@@ -34,18 +37,21 @@ DATAPREP    := uv run --project data-prep python
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
         export-android export-tflite label augment regex-label anonymize merge extract check model-label \
-        core-test lexicons
+        core-test core-diff lexicons
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 	@echo
 	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path  MODEL=$(MODEL)  FORCE=1"
 
-check: ## Run the unit tests (anonymizer regression cases)
+check: core-test ## Run the unit tests (pytest, and the Rust core's cargo test)
 	uv run --project common --with pytest pytest -q common/tests
 
 core-test: ## Run the Rust core's tests (the `full` normalizer test needs `make lexicons`)
 	cd core && cargo test
+
+core-diff: ## Compare the Rust core with the old Python pipeline (REF_REV, from git) on the battery, fuzz and DATA
+	$(CLASSIC) core/tools/core_diff.py $(if $(REF_REV),--rev $(REF_REV))
 
 lexicons: ## Write hazm's word lists to core/data/lexicons (only for the `full` normalizer)
 	$(COMMON) core/tools/gen_hazm_data.py --lexicons
@@ -118,7 +124,7 @@ test-tfidf: $(TFIDF) $(TEST) ## Score TF-IDF on the test set
 predict-tfidf: $(TFIDF) ## Classify TEXT with TF-IDF
 	$(CLASSIC) classic/baseline_tfidf.py predict $(TFIDF) "$(TEXT)"
 
-export-android: $(TFIDF) ## Export TF-IDF + hazm assets into ANDROID_MODULE
+export-android: $(TFIDF) ## Export the TF-IDF model + parity fixture into ANDROID_MODULE
 	$(if $(ANDROID_MODULE),,$(error Set ANDROID_MODULE=path/to/core/ml))
 	$(CLASSIC) classic/export_android_assets.py $(ANDROID_MODULE) --model $(TFIDF)
 

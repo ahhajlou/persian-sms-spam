@@ -11,4 +11,5 @@ dependencies = [
 
 [tool.uv.sources]
 spam-common = { path = "../common", editable = true }
+spam-core = { path = "../core/spam-core-py", editable = true }
 

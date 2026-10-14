@@ -1,0 +1,26 @@
+[project]
+name = "spam-core"
+version = "0.1.0"
+description = "Python binding for the Persian SMS preprocessing core"
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+module-name = "spam_core"
+# The regex work is slow in a debug build, and editable installs would build one.
+profile = "release"
+
+# uv rebuilds the extension when the core's code or rules change.
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "src/**/*.rs" },
+    { file = "../Cargo.lock" },
+    { file = "../spam-core/Cargo.toml" },
+    { file = "../spam-core/src/**/*.rs" },
+    { file = "../spam-core/rules/*" },
+]

@@ -11,7 +11,8 @@ The root `Makefile` is the single entry point; run everything from the repo root
 
 ```bash
 make sync                    # create/update all four uv environments
-make check                   # unit tests (common/tests)
+make check                   # unit tests: cargo test (core/) + pytest (common/tests)
+make core-diff               # Rust core vs the old Python pipeline (from git) on battery, fuzz and local data
 uv run --project common --with pytest pytest -q common/tests/test_anonymize.py -k masked   # one test
 make split                   # data/sms_labeled.jsonl -> data/train.jsonl + data/test.jsonl
 make test-all                # (re)train what is out of date, score every model, print comparison
@@ -19,7 +20,7 @@ make test-tfidf | train-fasttext | predict-tfidf TEXT="..."   # one model
 make label DATA=path.jsonl   # PySide6 label review GUI (opens empty without DATA)
 ```
 
-No linter or formatter is configured. Only `common/` has tests. Test the GUI headless with
+No Python linter or formatter is configured (Rust: `cargo fmt`, `cargo clippy` in `core/`). Tests are in `common/tests` and `core/spam-core/tests`. Test the GUI headless with
 `QT_QPA_PLATFORM=offscreen uv run --project data-prep python ...`.
 
 ## Architecture
@@ -36,11 +37,15 @@ exists once. Standalone file tools that only produce or edit data files go in `d
 Repo paths (`DATA_DIR`, `LABELED_FILE`, `TRAIN_FILE`, `MODELS_DIR`, `RESULTS_DIR`) come from
 `spam_common/data.py`, which finds them relative to the repo root. Don't hard-code paths.
 
-**One preprocessing pipeline.** Every model trains and predicts on `spam_common.pipeline.preprocess()`:
-anonymize → mask URLs (`URLTOKEN`) → mask numbers (`NUM_TOKEN`) → hazm normalize. The order matters,
-and the reasons are in the module docstring. Any change that alters pipeline or anonymizer
-output must bump `PIPELINE_VERSION` (and add a line to the history comment above it). Every anonymizer
-mistake found gets a regression case in `common/tests/test_anonymize.py` (masked or must-stay-unchanged lists).
+**One preprocessing pipeline, in Rust.** Every model trains and predicts on `spam_common.pipeline.preprocess()`,
+a thin wrapper over the Rust core in `core/spam-core` (Python module `spam_core`, built by maturin; `uv` rebuilds
+it when `core/` changes): anonymize → mask URLs (`URLTOKEN`) → mask numbers (`NUM_TOKEN`) → hazm `rules`
+normalize (`NORMALIZER` in `pipeline.py`). The order matters, and the reasons are in the `pipeline.py` docstring.
+The rules are data in `core/spam-core/rules/`. Any change that alters the output must bump `PIPELINE_VERSION`
+(a Rust constant in `core/spam-core/src/lib.rs`; add a line to the history comment in `pipeline.py`), and
+`cargo test` fails until you do (golden files, then `cargo run -p spam-core --example golden -- rules`).
+Every anonymizer mistake found gets a regression case in `core/spam-core/tests/cases/anonymize.json`
+(masked or must-stay-unchanged lists), which pytest and `cargo test` both read.
 
 **Android parity, and the planned Rust core.** The NoSpam app (`core:ml`) reimplements the pipeline
 in Kotlin and checks a parity fixture written by `make export-android`. The Kotlin side is still at
@@ -51,7 +56,7 @@ regex rules and character tables but not its word lists by default. Follow that 
 pipeline work that touches Android.
 
 **Makefile as build graph.** Model files and the split are real file targets that depend on the
-training data, their script and `$(PIPELINE)` (`pipeline.py` + `anonymize.py`). So editing the
+training data, their script and `$(PIPELINE)` (`pipeline.py`, `anonymize.py`, and the core's `.rs` and rules files). So editing the
 pipeline makes every model out of date and rebuilds the split; `make` retrains only the models you ask for.
 Only TF-IDF runs in NoSpam, so `make test-tfidf` is enough for pipeline work; fastText and ParsBERT
 stay in the repo and are trained only on request.

@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Shared data loading, preprocessing pipeline, train/test split and metrics for the Persian SMS spam models"
 requires-python = ">=3.13"
 dependencies = [
-    "hazm>=0.12.1",  # normalizer used by spam_common.pipeline
+    "spam-core",  # the Rust preprocessing core (core/spam-core-py), built by maturin
+    "hazm>=0.12.1",  # only for the differential test and `make lexicons`; removed in Phase 4
 ]
+
+[tool.uv.sources]
+spam-core = { path = "../core/spam-core-py", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.11.0,<0.12"]

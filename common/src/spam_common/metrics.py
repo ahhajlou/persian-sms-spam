@@ -1,13 +1,13 @@
 """Scoring shared by every model, so results are directly comparable.
 
 `evaluate` prints a report and saves it to models/results/<name>.json, with the
-PIPELINE_VERSION it was scored under; `python -m spam_common.metrics` prints all
+PIPELINE_VERSION and NORMALIZER it was scored under; `python -m spam_common.metrics` prints all
 saved results side by side and marks those from another pipeline version.
 """
 import json
 
 from spam_common.data import LABELS, RESULTS_DIR
-from spam_common.pipeline import PIPELINE_VERSION
+from spam_common.pipeline import NORMALIZER, PIPELINE_VERSION
 
 
 def evaluate(name, y_true, y_pred, positive="spam"):
@@ -29,6 +29,7 @@ def evaluate(name, y_true, y_pred, positive="spam"):
     result = {
         "name": name,
         "pipeline_version": PIPELINE_VERSION,
+        "normalizer": NORMALIZER,
         "n": total,
         "accuracy": sum(confusion[label][label] for label in LABELS) / total if total else 0.0,
         "f1_macro": sum(m["f1"] for m in per_label.values()) / len(LABELS),
@@ -66,16 +67,19 @@ def compare():
     results.sort(key=lambda r: r["f1_macro"], reverse=True)
     width = max(len(r["name"]) for r in results)
     print(f"{'model':<{width}}{'pipeline':>9}{'n':>6}{'accuracy':>10}{'macro f1':>10}{'spam f1':>9}{'missed spam':>13}{'blocked ham':>13}")
+    def current(r):
+        return r.get("pipeline_version") == PIPELINE_VERSION and r.get("normalizer") == NORMALIZER
+
     for r in results:
         # Results saved before the version was recorded have none ("?").
         version = r.get("pipeline_version")
-        mark = f"{'?' if version is None else version}{'' if version == PIPELINE_VERSION else '*'}"
+        mark = f"{'?' if version is None else version}{'' if current(r) else '*'}"
         print(
             f"{r['name']:<{width}}{mark:>9}{r['n']:>6}{r['accuracy']:>10.3f}{r['f1_macro']:>10.3f}"
             f"{r['per_label']['spam']['f1']:>9.3f}{r['missed_spam']:>13}{r['blocked_ham']:>13}"
         )
-    if any(r.get("pipeline_version") != PIPELINE_VERSION for r in results):
-        print(f"\n* not scored with the current pipeline (version {PIPELINE_VERSION}); "
+    if not all(current(r) for r in results):
+        print(f"\n* not scored with the current pipeline (version {PIPELINE_VERSION}, {NORMALIZER} normalizer); "
               "re-run that model's test, e.g. `make test-fasttext`.")
     if len({r["n"] for r in results}) > 1:
         print("\nWarning: results were computed on test sets of different sizes; re-run `make test-all`.")

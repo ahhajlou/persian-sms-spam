@@ -17,7 +17,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.pipeline import Pipeline
 from spam_common.data import load_texts_labels
-from spam_common.pipeline import preprocess
+from spam_common.pipeline import ngrams, preprocess
 from spam_common.metrics import evaluate
 from spam_common.model_label import model_label
 
@@ -29,12 +29,13 @@ def load_jsonl(path):
 
 
 def build_pipeline():
-    # char_wb + n-gram range (2,4) is robust to Persian word-spacing
-    # inconsistencies (half-space/zwnj vs full space) since it doesn't
-    # depend on clean tokenization at all.
+    # char_wb n-grams of 2-4 characters are robust to Persian word-spacing
+    # inconsistencies (half-space/zwnj vs full space) since they don't
+    # depend on clean tokenization at all. The Rust core makes them (lowercase,
+    # char_wb, range 2-4), the same code the phone runs; with a callable analyzer
+    # sklearn ignores lowercase and ngram_range.
     vectorizer = TfidfVectorizer(
-        analyzer="char_wb",
-        ngram_range=(2, 4),
+        analyzer=ngrams,
         min_df=1,          # lower for tiny demo dataset; use 2-3 on real data
         sublinear_tf=True,
     )

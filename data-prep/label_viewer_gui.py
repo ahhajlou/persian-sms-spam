@@ -4,6 +4,8 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+from spam_common.data import LABELED_FILE, write_jsonl
+
 # Optional but highly recommended for proper Persian/Arabic RTL display
 try:
     import arabic_reshaper
@@ -13,7 +15,7 @@ except ImportError:
     RTL_SUPPORT = False
 
 class SMSLabelerApp:
-    def __init__(self, root, path="data/sms_labeled.jsonl"):
+    def __init__(self, root, path=str(LABELED_FILE)):
         self.root = root
         self.default_path = path
         self.root.title("SMS Labeler GUI")
@@ -316,10 +318,7 @@ class SMSLabelerApp:
             return
         
         try:
-            with open(self.filepath, 'w', encoding='utf-8') as f:
-                for item in self.data:
-                    # ensure_ascii=False preserves Persian characters
-                    f.write(json.dumps(item, ensure_ascii=False) + '\n')
+            write_jsonl(self.data, self.filepath)
             messagebox.showinfo("Success", "File saved successfully!")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save file: {e}")

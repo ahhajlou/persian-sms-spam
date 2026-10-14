@@ -7,7 +7,11 @@ dependencies = [
     "arabic-reshaper>=3.0.0",
     "python-bidi>=0.6.0",
     "requests>=2.32.0",
+    "spam-common",
 ]
+
+[tool.uv.sources]
+spam-common = { path = "../common", editable = true }
 
 [tool.uv]
 # uv's bundled Python ships a Tk that crashes (xcb assertion) on Fedora/Wayland;

@@ -26,14 +26,13 @@ import hashlib
 import json
 import re
 import secrets
-import sys
 from collections import Counter
 from pathlib import Path
 
-from spam_common.data import DATA_DIR, load_jsonl, write_jsonl
+from spam_common.data import DATA_DIR, load_jsonl, output_path, write_jsonl
 
 SALT_FILE = DATA_DIR / ".anonymize_salt"
-DROP_FIELDS = ("installId",)  # identifies the device
+DROP_FIELDS = ("installId", "hwid")  # identify the device
 
 _TRANSLATE = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩يكى", "01234567890123456789یکی")
 
@@ -148,11 +147,7 @@ def main():
     ap.add_argument("--force", action="store_true", help="overwrite the output file if it exists")
     args = ap.parse_args()
 
-    output = args.output or args.input.with_name(f"{args.input.stem}_anon.jsonl")
-    if output.resolve() == args.input.resolve():
-        sys.exit("Output must differ from input.")
-    if output.exists() and not args.force:
-        sys.exit(f"{output} already exists; pass --force to overwrite it.")
+    output = output_path(args.input, "anon", args.output, args.force)
 
     salt = load_salt()
     counts = Counter()

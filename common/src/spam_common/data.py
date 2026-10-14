@@ -39,3 +39,18 @@ def write_jsonl(rows, path) -> None:
     with open(path, "w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def output_path(input_path, suffix, output=None, force=False) -> Path:
+    """Output file for a step that turns one JSONL file into another.
+
+    Defaults to <input>_<suffix>.jsonl next to the input. Exits instead of
+    overwriting the input, or an existing output unless `force` is set.
+    """
+    input_path = Path(input_path)
+    output = Path(output) if output else input_path.with_name(f"{input_path.stem}_{suffix}.jsonl")
+    if output.resolve() == input_path.resolve():
+        raise SystemExit("Output must differ from input.")
+    if output.exists() and not force:
+        raise SystemExit(f"{output} already exists; pass --force to overwrite it.")
+    return output

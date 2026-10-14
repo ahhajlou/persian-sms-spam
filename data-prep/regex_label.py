@@ -12,10 +12,11 @@ file is never overwritten unless --force is given.
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
-DEFAULT_RULES = Path(__file__).resolve().parents[1] / "data" / "regex_rules.json"
+from spam_common.data import DATA_DIR, load_jsonl, output_path, write_jsonl
+
+DEFAULT_RULES = DATA_DIR / "regex_rules.json"
 
 
 def load_rules(path):
@@ -40,20 +41,10 @@ def main():
     ap.add_argument("--force", action="store_true", help="overwrite the output file if it exists")
     args = ap.parse_args()
 
-    output = args.output or args.input.with_name(f"{args.input.stem}_regex.jsonl")
-    if output.resolve() == args.input.resolve():
-        sys.exit("Output must differ from input.")
-    if output.exists() and not args.force:
-        sys.exit(f"{output} already exists; pass --force to overwrite it.")
-
+    output = output_path(args.input, "regex", args.output, args.force)
     rules = load_rules(args.rules)
-    with open(args.input, encoding="utf-8") as f:
-        rows = [json.loads(line) for line in f if line.strip()]
-    label(rows, rules)
-
-    with open(output, "w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    rows = label(load_jsonl(args.input), rules)
+    write_jsonl(rows, output)
 
     n_spam = sum(row["label"] == "spam" for row in rows)
     print(f"{len(rules)} rules, {len(rows)} messages: {n_spam} spam, {len(rows) - n_spam} ham -> {output}")

@@ -6,10 +6,9 @@ as style reference — never feeding the whole dataset into one prompt.
 Prereqs:
     ollama pull gemma3:4b
     ollama serve   (usually starts automatically after install)
-    pip install requests
 
 Usage:
-    python augment_spam_local_llm.py data.jsonl augmented.jsonl 200
+    python augment_spam.py data.jsonl augmented.jsonl 200
     (generates ~200 new synthetic spam rows into augmented.jsonl)
 """
 import sys
@@ -17,6 +16,7 @@ import json
 import random
 import time
 import requests
+from spam_common.data import load_jsonl, write_jsonl
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "gemma-4-e4b-local:latest"  # must match `ollama list` output exactly
@@ -39,16 +39,7 @@ PROMPT_TEMPLATE = """تو در حال تولید نمونه‌های آموزش�
 
 
 def load_spam_examples(path):
-    spam = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            if row.get("label") == "spam":
-                spam.append(row["text"])
-    return spam
+    return [row["text"] for row in load_jsonl(path) if row.get("label") == "spam"]
 
 
 def call_ollama(prompt):
@@ -114,12 +105,10 @@ def main(data_path, out_path, target_count):
                 generated.append(text)
         print(f"  generated so far: {len(generated)}/{target_count}  (call {attempts})")
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        for text in generated[:target_count]:
-            f.write(json.dumps(
-                {"address": "synthetic", "text": text, "label": "spam", "synthetic": True},
-                ensure_ascii=False
-            ) + "\n")
+    write_jsonl(
+        [{"address": "synthetic", "text": text, "label": "spam", "synthetic": True} for text in generated[:target_count]],
+        out_path,
+    )
 
     print(f"Wrote {min(len(generated), target_count)} synthetic examples to {out_path}")
 

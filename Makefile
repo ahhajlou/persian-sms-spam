@@ -113,10 +113,11 @@ test-fasttext: $(FASTTEXT) $(TEST) ## Score fastText (full and quantized) on the
 predict-fasttext: $(FASTTEXT) ## Classify TEXT with fastText
 	$(CLASSIC) classic/baseline_fasttext.py predict $(FASTTEXT) "$(TEXT)"
 
-train-fasttext-pretrained: $(TRAIN) $(TEST) ## Compare fastText with/without cc.fa.300 vectors (needs FASTTEXT_VEC)
-	@test -f $(FASTTEXT_VEC) || { echo "Missing $(FASTTEXT_VEC) — see classic/fasttext_with_pretrained_vector.py docstring"; exit 1; }
+train-fasttext-pretrained: $(TRAIN) $(TEST) ## Train + score fastText with cc.fa.300 vectors (needs FASTTEXT_VEC); see make compare
+	@test -f $(FASTTEXT_VEC) || { echo "Missing $(FASTTEXT_VEC) — see the classic/baseline_fasttext.py docstring"; exit 1; }
 	@mkdir -p $(MODELS)
-	$(CLASSIC) classic/fasttext_with_pretrained_vector.py train $(TRAIN) $(MODELS)/fasttext-cc.bin $(FASTTEXT_VEC)
+	$(CLASSIC) classic/baseline_fasttext.py train $(TRAIN) $(MODELS)/model-fasttext-cc.bin $(FASTTEXT_VEC)
+	$(CLASSIC) classic/baseline_fasttext.py test $(MODELS)/model-fasttext-cc.bin $(TEST)
 
 # --- ParsBERT ---------------------------------------------------------------
 

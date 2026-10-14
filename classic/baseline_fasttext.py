@@ -1,9 +1,17 @@
 """
 Method #2: FastText supervised classifier
 Usage:
-    python baseline_fasttext.py train train.jsonl model.bin
+    python baseline_fasttext.py train train.jsonl model.bin [cc.fa.300.vec]
     python baseline_fasttext.py test  model.bin test.jsonl
     python baseline_fasttext.py predict model.bin "متن پیامک"
+
+`train` also writes a quantized <model>_quantized.ftz for Android.
+
+Optional pretrained vectors: pass Meta's Persian cc.fa.300 word vectors to
+initialise the embeddings (dim becomes 300). Training needs the plain-text
+.vec form, not the compressed .bin; `python download_fasttext.py` downloads
+cc.fa.300.bin (several GB). Train once with and once without, then
+`make compare` shows whether the vectors help on this data.
 
 Note: fasttext's supervised trainer reads its own plain-text format
 (one example per line: "__label__<label> <space-separated tokens>"),
@@ -47,7 +55,7 @@ def write_fasttext_file(texts, labels, path):
             f.write(f"__label__{label} {text}\n")
 
 
-def train(data_path, model_path):
+def train(data_path, model_path, pretrained_vec_path=None):
     t0 = time.time()
     print("Loading + preprocessing...")
     texts, labels = load_jsonl(data_path)
@@ -68,7 +76,9 @@ def train(data_path, model_path):
                            # very small/toy dataset
         wordNgrams=2,      # bigrams help catch short spam phrases
         minCount=2,        # ignore singleton tokens once you have real volume
-        dim=50,
+        # dim must match the pretrained vectors (300 for cc.fa.300).
+        dim=300 if pretrained_vec_path else 50,
+        pretrainedVectors=pretrained_vec_path or "",
         loss="softmax",
         # fastText spawns `thread` training threads regardless of core
         # count; on constrained/containerized CPUs this has been known
@@ -111,7 +121,7 @@ def predict(model_path, text):
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "train":
-        train(sys.argv[2], sys.argv[3])
+        train(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     elif cmd == "test":
         test(sys.argv[2], sys.argv[3])
     elif cmd == "predict":

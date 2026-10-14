@@ -32,12 +32,15 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment regex-label anonymize merge extract
+        export-android export-tflite label augment regex-label anonymize merge extract check
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 	@echo
 	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path  FORCE=1"
+
+check: ## Run the unit tests (anonymizer regression cases)
+	uv run --project common --with pytest pytest -q common/tests
 
 sync: ## Create/update every uv environment
 	for p in common data-prep classic parsbert; do uv sync --project $$p || exit 1; done

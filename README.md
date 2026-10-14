@@ -24,10 +24,10 @@ results can be compared directly. Latest results on 219 unseen test messages:
 
 | Model | Accuracy | Macro F1 | Missed spam | Real messages blocked |
 |---|---|---|---|---|
+| ParsBERT | 0.982 | 0.978 | 2 | 2 |
 | fastText | 0.977 | 0.972 | 3 | 2 |
 | TF-IDF | 0.973 | 0.966 | 3 | 3 |
-| ParsBERT | 0.968 | 0.961 | 3 | 4 |
-| fastText quantized | 0.927 | 0.915 | 2 | 14 |
+| fastText quantized | 0.932 | 0.919 | 3 | 12 |
 
 For a spam filter, "real messages blocked" is the costliest error: those are messages
 the user never sees.
@@ -59,6 +59,7 @@ ParsBERT but is optional.
 
 ```bash
 make sync     # create every environment (first run downloads torch, so it takes a while)
+make check    # run the unit tests
 make          # list all commands
 ```
 
@@ -142,7 +143,8 @@ raw SMS → anonymize → mask URLs → mask numbers → hazm normalize → mode
 
 - **anonymize** replaces private values with placeholders such as `[CODE]`, `[CARD]` or
   `[NATID]` (national IDs are detected by their check digit), so the model learns
-  "this is an OTP message", not the code itself.
+  "this is an OTP message", not the code itself. `common/tests/test_anonymize.py` holds
+  the cases it must mask and must leave alone; add one for every mistake you find.
 - **mask URLs / numbers** turns remaining links and numbers into `URLTOKEN` and `NUM_TOKEN`.
 - **hazm** normalizes Persian text (letters, digits, spacing, half-spaces).
 

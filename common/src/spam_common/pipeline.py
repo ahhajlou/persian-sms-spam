@@ -20,7 +20,9 @@ from spam_common.anonymize import anonymize
 
 # 1: URL mask -> number mask -> hazm
 # 2: anonymize added in front
-PIPELINE_VERSION = 2
+# 3: anonymize fixes (emails need a domain, URI secrets, no keyword matches
+#    inside placeholders or links, values on the next line, Luhn for bare cards)
+PIPELINE_VERSION = 3
 
 URL_RE = re.compile(
     r"(?:https?://[^\s]+)"

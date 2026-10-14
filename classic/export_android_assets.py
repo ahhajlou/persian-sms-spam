@@ -320,6 +320,16 @@ def build_battery(seed: int = 20260910) -> list:
         "حساب کاربری خود را شارژ کنید",
         "رمز دستگاه را وارد کنید",
         "يك كد ى",
+        "#AMIR1827@HALL@ON#",
+        "vless://a12f34ed-dcaa-56fc-7cba-db8f9c01dd23@mtn.example.space:443?path=/",
+        "رمز عبور:\nGoi12Q3v",
+        "رمز عبور:\nhttps://example.ir/reset",
+        "رمز اول کارت\nCode: 123456",
+        "رمز: 12345 انقضا 1405",
+        "برداشت از حساب 0303438303006 مبلغ 50,000",
+        "کارت مبدا: \u200e6037-99**-****-1234",
+        "https://example.ir/login/12345 و Account.aspx?Req=12345",
+        "کد تخفیف 20 درصدی، خرید رمز ارز",
     ]
     rng = random.Random(seed)
     letters = "آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیینمی"

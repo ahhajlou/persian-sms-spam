@@ -5,14 +5,14 @@ Spam/ham classifiers for Persian SMS, trained on messages exported from Android 
 | Directory | Approach | Main dependencies |
 |---|---|---|
 | [`common/`](common/) | Shared preprocessing pipeline, anonymizer, data loading, train/test split, metrics (`spam_common`) | hazm |
-| [`data-prep/`](data-prep/) | Regex first-round labelling, label viewer GUI, synthetic spam augmentation via local LLM | requests, tkinter |
+| [`data-prep/`](data-prep/) | SMS extraction, regex first-round labelling, label viewer GUI, synthetic spam via local LLM | requests, tkinter |
 | [`classic/`](classic/) | TF-IDF + Linear SVM and fastText, exported as Android assets | scikit-learn, fasttext, hazm |
 | [`parsbert/`](parsbert/) | Fine-tuned ParsBERT (`HooshvareLab/bert-fa-zwnj-base`), exported to TFLite | torch, transformers |
 
 Each directory is an independent [uv](https://docs.astral.sh/uv/) project with its own
 `pyproject.toml`, `uv.lock` and `.venv`, because their dependencies differ widely
 (e.g. `classic` needs `numpy<2` for fastText, `parsbert` pulls in torch).
-`classic` and `parsbert` install `common` as an editable path dependency.
+The others install `common` as an editable path dependency.
 
 ## Usage
 
@@ -27,8 +27,8 @@ make predict-tfidf TEXT="متن پیامک"
 make export-android ANDROID_MODULE=path/to/core/ml
 ```
 
-Models are file targets: they are retrained only when `data/train.jsonl` or their
-training script changes. `make test-all` therefore fine-tunes ParsBERT when it is out of date.
+Models are file targets: they are retrained only when `data/train.jsonl`, their
+training script or the preprocessing pipeline changes. `make test-all` therefore fine-tunes ParsBERT when it is out of date.
 
 ### Preprocessing
 
@@ -46,7 +46,8 @@ whenever a change alters the output. Changing the pipeline retrains every model.
 
 Every model trains on `data/train.jsonl` and is scored on the same `data/test.jsonl`.
 The split drops duplicate messages first, compared after preprocessing (the same SMS is
-often received many times, or differs only in a code), so no test message is seen during training, and keeps the ham/spam ratio in both parts.
+often received many times, or differs only in a code), so no test message is seen during
+training, and keeps the ham/spam ratio in both parts.
 Results are saved to `models/results/<model>.json`; `make compare` prints them side by side.
 
 ## Shared directories (not committed)

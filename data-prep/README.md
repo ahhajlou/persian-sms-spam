@@ -1,25 +1,13 @@
 # Data prep
 
-From the repo root:
+Standalone tools that produce or edit dataset files; no model imports them.
 
-```bash
-make anonymize IN=data/phone/export.jsonl    # mask sensitive data -> export_anon.jsonl
-make regex-label IN=data/phone/export_anon.jsonl  # first-round labels -> export_anon_regex.jsonl
-make extract                                # adb dump data/sms_dump.txt -> data/sms_unlabeled.jsonl
-make label                                  # label viewer GUI on data/sms_labeled.jsonl
-make label DATA=data/other.jsonl            # ...or on another file
-make augment N=200                          # synthetic spam via a local Ollama model
-```
+- `extract_sms.py`: `adb` SMS dump → unlabelled JSONL (`make extract`)
+- `regex_label.py`: first-round labels from the SpamBlocker rules in `data/regex_rules.json` (`make regex-label`)
+- `label_viewer_gui.py`: review and fix labels by hand (`make label`)
+- `augment_spam.py`: synthetic spam from a local Ollama model (`make augment`)
 
-`anonymize` (in `common`, `spam_common.anonymize`) replaces passwords, usernames,
-OTP/tracking codes, national IDs, card/IBAN/account numbers, balances, phone numbers
-and emails with placeholders such as `[PASSWORD]` or `[CARD]`, and turns phone-number
-senders into stable `PHONE_<hash>` pseudonyms. It is rule-based: person names and
-street addresses are not detected.
-
-`regex_label.py` labels a message spam if any SpamBlocker blacklist rule in
-`data/regex_rules.json` matches it; everything else is ham. It never overwrites an
-existing output unless given `--force`.
+The full workflow is in the root README under "Adding data from a phone".
 
 This environment uses the system Python (`python-preference = "only-system"`):
 uv's bundled Python has a Tk build that crashes on Fedora/Wayland.

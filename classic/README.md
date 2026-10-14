@@ -1,22 +1,12 @@
 # Classic models
 
-Lightweight baselines that run on-device without a neural network runtime.
-Usually run from the repo root via the Makefile (`make train-tfidf`, `make test-fasttext`, ...).
-The equivalent direct commands, from this directory:
+Lightweight models that run on-device without a neural network runtime.
 
-```bash
-# TF-IDF (char n-grams) + Linear SVM
-uv run baseline_tfidf.py train ../data/train.jsonl ../models/model-tfidf.joblib
-uv run baseline_tfidf.py test  ../models/model-tfidf.joblib ../data/test.jsonl
-uv run baseline_tfidf.py predict ../models/model-tfidf.joblib "متن پیامک"
+- `baseline_tfidf.py`: TF-IDF (char n-grams) + Linear SVM; the model the Android app uses
+- `baseline_fasttext.py`: fastText, optionally with pretrained cc.fa.300 vectors; also writes a quantized `.ftz`
+- `download_fasttext.py`: downloads the cc.fa.300 vectors
+- `export_android_assets.py`: exports the TF-IDF model, hazm resources and the parity fixture to the Android module
 
-# fastText (from scratch, or with pretrained cc.fa.300 vectors)
-uv run baseline_fasttext.py train ../data/train.jsonl ../models/model-fasttext.bin
-uv run download_fasttext.py
-uv run fasttext_with_pretrained_vector.py train ../data/train.jsonl ../models/fasttext-cc.bin cc.fa.300.vec  # needs the .vec form, see docstring
-
-# Export TF-IDF model + hazm normalizer to an Android module
-uv run export_android_assets.py path/to/core/ml
-```
-
-`test` scores a model on the shared test set and saves the result to `../models/results/`.
+Run them via the root Makefile (`make help`), or directly from this directory,
+e.g. `uv run baseline_tfidf.py predict ../models/model-tfidf.joblib "متن پیامک"`.
+Each script's docstring lists its commands.

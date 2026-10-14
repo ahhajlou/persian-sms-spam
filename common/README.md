@@ -1,13 +1,15 @@
 # spam_common
 
-Shared by every model project (installed editable via `[tool.uv.sources]`):
+Code that more than one project depends on, installed editable into `classic`, `parsbert`
+and `data-prep` via `[tool.uv.sources]`. Its only dependency is hazm.
 
-- `data.py`: repo paths (`TRAIN_FILE`, `TEST_FILE`, `MODELS_DIR`, ...), labels, `load_texts_labels`, `clean_text`
+- `data.py`: repo paths (`DATA_DIR`, `TRAIN_FILE`, `MODELS_DIR`, ...), labels, JSONL helpers, `output_path()`
 - `pipeline.py`: `preprocess()`, the one text pipeline every model trains and predicts on
   (anonymize → URL mask → number mask → hazm), mirrored in Kotlin on Android
-- `split.py`: `python -m spam_common.split` builds the deduplicated, stratified train/test split
-- `merge.py`: `python -m spam_common.merge` adds a reviewed file to the labelled dataset
-- `metrics.py`: `evaluate()` prints and saves a report; `python -m spam_common.metrics` compares all saved results
-- `anonymize.py`: `python -m spam_common.anonymize` masks sensitive data in a phone export with typed placeholders
+- `anonymize.py`: rule-based masking of passwords, codes, IDs, card/account numbers, phones, emails
+- `split.py`: deduplicated, stratified train/test split
+- `merge.py`: adds a reviewed file to the labelled dataset
+- `metrics.py`: `evaluate()` saves a model's test report; running it compares all saved reports
 
-Its only dependency is hazm (for the normalizer), so it works in any model's environment.
+Rule: anything a model or the split depends on lives here, so the logic exists once.
+Commands: `make help` in the repo root.

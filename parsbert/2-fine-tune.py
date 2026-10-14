@@ -5,15 +5,14 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from spam_common.data import ID2LABEL, LABEL2ID, MODELS_DIR, TRAIN_FILE, clean_text, load_texts_labels
+from spam_common.data import ID2LABEL, LABEL2ID, TRAIN_FILE, clean_text, load_texts_labels
 from spam_common.pipeline import preprocess
 
-FINAL_MODEL_DIR = MODELS_DIR / "parsbert_spam_final"
+from config import BASE_MODEL, CHECKPOINT_DIR, FINAL_MODEL_DIR, MAX_LENGTH
 
-model_name = "HooshvareLab/bert-fa-zwnj-base"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
 model = AutoModelForSequenceClassification.from_pretrained(
-    model_name, 
+    BASE_MODEL,
     num_labels=len(ID2LABEL),
     id2label=ID2LABEL,
     label2id=LABEL2ID,
@@ -32,7 +31,7 @@ full_dataset = Dataset.from_dict({"text": texts, "label": labels})
 split_dataset = full_dataset.train_test_split(test_size=0.1, seed=42)
 
 def tokenize(batch):
-    return tokenizer(batch["text"], padding="max_length", truncation=True, max_length=128)
+    return tokenizer(batch["text"], padding="max_length", truncation=True, max_length=MAX_LENGTH)
 
 # Apply tokenization
 tokenized_datasets = split_dataset.map(tokenize, batched=True)
@@ -40,7 +39,7 @@ tokenized_datasets.set_format(type="torch", columns=["input_ids", "attention_mas
 
 
 training_args = TrainingArguments(
-    output_dir=str(MODELS_DIR / "parsbert_checkpoints"),
+    output_dir=str(CHECKPOINT_DIR),
     num_train_epochs=4,
     per_device_train_batch_size=8,
     logging_steps=10,

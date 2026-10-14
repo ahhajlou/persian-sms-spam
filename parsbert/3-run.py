@@ -1,22 +1,13 @@
-# from transformers import pipeline
-
-# text = "سلام"
-# text = "تخفیف"
-# # text = "کد تخفیف ویژه شما آماده است، همین الان دریافت کنید"
-# classifier = pipeline("text-classification", model="./parsbert_spam_final", tokenizer="./parsbert_spam_final")
-# result = classifier(text)
-# print(f"{text=}")
-# print(result)
-
 from transformers import pipeline
-from spam_common.data import MODELS_DIR, clean_text
+from spam_common.data import clean_text
 from spam_common.pipeline import preprocess
 
-MODEL_DIR = str(MODELS_DIR / "parsbert_spam_final")
-classifier = pipeline("text-classification", model=MODEL_DIR, tokenizer=MODEL_DIR)
+from config import FINAL_MODEL_DIR, MAX_LENGTH
+
+classifier = pipeline("text-classification", model=str(FINAL_MODEL_DIR), tokenizer=str(FINAL_MODEL_DIR))
 
 def check_spam(text, threshold=0.5):
-    result = classifier(clean_text(preprocess(text)))[0]
+    result = classifier(clean_text(preprocess(text)), truncation=True, max_length=MAX_LENGTH)[0]
     label, score = result["label"], result["score"]
     
     # Normalize to "probability of spam" regardless of which label won

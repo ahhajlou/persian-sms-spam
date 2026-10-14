@@ -1,16 +1,15 @@
 import litert_torch
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from spam_common.data import MODELS_DIR
+from config import FINAL_MODEL_DIR, MAX_LENGTH, TFLITE_FILE
 
-model_path = MODELS_DIR / "parsbert_spam_final"
-model = AutoModelForSequenceClassification.from_pretrained(model_path)
-tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = AutoModelForSequenceClassification.from_pretrained(FINAL_MODEL_DIR)
+tokenizer = AutoTokenizer.from_pretrained(FINAL_MODEL_DIR)
 model.eval()
 
 # Build a sample input matching your fine-tuning max_length
 sample_text = "این یک متن نمونه است"
-inputs = tokenizer(sample_text, return_tensors="pt", padding="max_length", truncation=True, max_length=128)
+inputs = tokenizer(sample_text, return_tensors="pt", padding="max_length", truncation=True, max_length=MAX_LENGTH)
 sample_inputs = (inputs["input_ids"], inputs["attention_mask"])
 
 edge_model = litert_torch.convert(model, sample_inputs)
@@ -34,4 +33,4 @@ else:
     print("Torch:", torch_output.numpy())
     print("Edge:", edge_logits)
 
-edge_model.export(str(MODELS_DIR / "parsbert_spam.tflite"))
+edge_model.export(str(TFLITE_FILE))

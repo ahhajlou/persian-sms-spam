@@ -50,7 +50,7 @@ class SMSLabelerApp:
 
         ttk.Label(filter_frame, text="Label:").pack(side="left", padx=(0, 5))
         self.label_var = tk.StringVar(value="All")
-        label_combo = ttk.Combobox(filter_frame, textvariable=self.label_var, values=["All", "spam", "ham"], state="readonly", width=10)
+        label_combo = ttk.Combobox(filter_frame, textvariable=self.label_var, values=["All", "spam", "ham", "null"], state="readonly", width=10)
         label_combo.pack(side="left", padx=5)
 
         ttk.Label(filter_frame, text="Regex:").pack(side="left", padx=(15, 5))
@@ -180,7 +180,9 @@ class SMSLabelerApp:
 
         for i, item in enumerate(self.data):
             # 1. Label Filter
-            if label_filter != "All" and item.get("label") != label_filter:
+            # "null" matches rows whose label is missing, null or empty.
+            label = item.get("label") or "null"
+            if label_filter != "All" and label != label_filter:
                 continue
             
             # 2. Regex Filter
@@ -215,7 +217,7 @@ class SMSLabelerApp:
             
             self.tree.insert("", "end", iid=i, values=(
                 i, 
-                item.get("label", ""), 
+                item.get("label") or "null",
                 item.get("address", ""), 
                 text_preview
             ))
@@ -253,7 +255,7 @@ class SMSLabelerApp:
         
         self.detail_id_var.set(f"Index: {idx}")
         self.position_var.set(f"({self.current_index + 1}/{len(self.filtered_indices)})")
-        self.detail_label_var.set(item.get("label", "ham"))
+        self.detail_label_var.set(item.get("label") or "ham")
         
         # Update text display with RTL support
         raw_text = item.get("text", "")

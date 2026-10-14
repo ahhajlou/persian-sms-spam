@@ -44,8 +44,8 @@ $(TRAIN) $(TEST) &: $(DATA) common/src/spam_common/split.py
 
 split: $(TRAIN) $(TEST) ## Build the shared, deduplicated train/test split from DATA
 
-label: ## Open the label viewer GUI
-	$(DATAPREP) data-prep/label_viewer_gui.py
+label: ## Open the label viewer GUI on DATA
+	$(DATAPREP) data-prep/label_viewer_gui.py $(DATA)
 
 augment: ## Generate N synthetic spam rows with a local Ollama model
 	$(DATAPREP) data-prep/augment_spam.py $(DATA) data/augmented.jsonl $(N)

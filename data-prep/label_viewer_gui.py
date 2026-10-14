@@ -1,5 +1,6 @@
 import json
 import re
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -12,8 +13,9 @@ except ImportError:
     RTL_SUPPORT = False
 
 class SMSLabelerApp:
-    def __init__(self, root):
+    def __init__(self, root, path="data/sms_labeled.jsonl"):
         self.root = root
+        self.default_path = path
         self.root.title("SMS Labeler GUI")
         self.root.geometry("900x700")
         
@@ -37,7 +39,7 @@ class SMSLabelerApp:
         file_frame = ttk.Frame(top_frame)
         file_frame.pack(fill="x", pady=5)
         ttk.Label(file_frame, text="File:").pack(side="left")
-        self.file_var = tk.StringVar(value="sms_labeled_2.jsonl")
+        self.file_var = tk.StringVar(value=self.default_path)
         ttk.Entry(file_frame, textvariable=self.file_var, width=50).pack(side="left", padx=5)
         ttk.Button(file_frame, text="Browse", command=self.browse_file).pack(side="left")
         ttk.Button(file_frame, text="Load", command=self.load_data).pack(side="left", padx=5)
@@ -137,7 +139,7 @@ class SMSLabelerApp:
         path = filedialog.askopenfilename(
             title="Select JSONL File",
             filetypes=[("JSONL files", "*.jsonl"), ("All files", "*.*")],
-            initialfile="sms_labeled_2.jsonl"
+            initialfile=self.file_var.get()
         )
         if path:
             self.file_var.set(path)
@@ -328,5 +330,6 @@ if __name__ == "__main__":
     if 'clam' in style.theme_names():
         style.theme_use('clam')
     
-    app = SMSLabelerApp(root)
+    app = SMSLabelerApp(root, *sys.argv[1:2])
+    app.load_data()
     root.mainloop()

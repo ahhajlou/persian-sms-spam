@@ -4,10 +4,10 @@ Usage:
     python baseline_tfidf.py train train.jsonl model.joblib
     python baseline_tfidf.py test  model.joblib test.jsonl
     python baseline_tfidf.py predict model.joblib "متن پیامک"
-    python baseline_tfidf.py export model.joblib model.json
+
+For Android, export with export_android_assets.py (make export-android).
 """
 import sys
-import json
 from pathlib import Path
 
 import joblib
@@ -59,29 +59,8 @@ def test(model_path, data_path):
 
 def predict(model_path, text):
     pipe = joblib.load(model_path)
-    pred = pipe.predict([preprocess(text)])[0]
-    score = pipe.decision_function([preprocess(text)])[0]
-    print(f"label={pred}  score={score:.3f}")
-
-def export_to_mobile(model_path, json_path):
-    # Load the trained pipeline
-    pipe = joblib.load(model_path)
-    vectorizer = pipe.named_steps["tfidf"]
-    clf = pipe.named_steps["clf"]
-    
-    # Extract the core components
-    export_data = {
-        "vocab": vectorizer.vocabulary_,          # Dict: ngram -> index
-        "weights": clf.coef_[0].tolist(),         # SVM weights (for binary classification)
-        "bias": float(clf.intercept_[0]),         # SVM bias/intercept
-        "classes": clf.classes_.tolist()          # e.g., ["ham", "spam"]
-    }
-    
-    # Save to JSON
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(export_data, f, ensure_ascii=False)
-    
-    print(f"✅ Successfully exported to {json_path}")
+    x = [preprocess(text)]
+    print(f"label={pipe.predict(x)[0]}  score={pipe.decision_function(x)[0]:.3f}")
 
 
 if __name__ == "__main__":
@@ -92,7 +71,5 @@ if __name__ == "__main__":
         test(sys.argv[2], sys.argv[3])
     elif cmd == "predict":
         predict(sys.argv[2], sys.argv[3])
-    elif cmd == "export":
-        export_to_mobile(sys.argv[2], sys.argv[3])
     else:
         print(__doc__)

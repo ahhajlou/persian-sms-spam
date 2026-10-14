@@ -20,7 +20,6 @@ models/
 *.train.txt
 *.ftz
 *.tflite
-model-tfidf.json
 
 # Pretrained fastText vectors (downloaded by classic/download_fasttext.py)
 cc.fa.300.*

@@ -4,7 +4,7 @@ Spam/ham classifiers for Persian SMS, trained on messages exported from Android 
 
 | Directory | Approach | Main dependencies |
 |---|---|---|
-| [`common/`](common/) | Shared data paths, loading, train/test split and metrics (`spam_common`) | none |
+| [`common/`](common/) | Shared preprocessing pipeline, anonymizer, data loading, train/test split, metrics (`spam_common`) | hazm |
 | [`data-prep/`](data-prep/) | Regex first-round labelling, label viewer GUI, synthetic spam augmentation via local LLM | requests, tkinter |
 | [`classic/`](classic/) | TF-IDF + Linear SVM and fastText, exported as Android assets | scikit-learn, fasttext, hazm |
 | [`parsbert/`](parsbert/) | Fine-tuned ParsBERT (`HooshvareLab/bert-fa-zwnj-base`), exported to TFLite | torch, transformers |
@@ -30,11 +30,23 @@ make export-android ANDROID_MODULE=path/to/core/ml
 Models are file targets: they are retrained only when `data/train.jsonl` or their
 training script changes. `make test-all` therefore fine-tunes ParsBERT when it is out of date.
 
+### Preprocessing
+
+Every model trains and predicts on the output of `spam_common.pipeline.preprocess()`:
+
+```
+raw SMS → anonymize → mask URLs → mask numbers → hazm normalize → model
+```
+
+The Android app runs the same steps in Kotlin. `make export-android` writes a fixture
+with the expected output of every step for its parity test. Bump `PIPELINE_VERSION`
+whenever a change alters the output. Changing the pipeline retrains every model.
+
 ### Evaluation
 
 Every model trains on `data/train.jsonl` and is scored on the same `data/test.jsonl`.
-The split drops duplicate messages first (the same SMS is often received many times),
-so no test message is seen during training, and keeps the ham/spam ratio in both parts.
+The split drops duplicate messages first, compared after preprocessing (the same SMS is
+often received many times, or differs only in a code), so no test message is seen during training, and keeps the ham/spam ratio in both parts.
 Results are saved to `models/results/<model>.json`; `make compare` prints them side by side.
 
 ## Shared directories (not committed)
@@ -45,6 +57,19 @@ models/   # trained models, checkpoints, exports and results/
 ```
 
 Both contain or are derived from personal messages and are listed in `.gitignore`.
+
+## Adding data from a phone
+
+```bash
+make anonymize   IN=data/<phone>/export.jsonl              # mask private data
+make regex-label IN=data/<phone>/export_anon.jsonl         # first-round labels
+make label     DATA=data/<phone>/export_anon_regex.jsonl   # fix labels by hand in the GUI
+make merge       IN=data/<phone>/export_anon_regex.jsonl   # add to data/sms_labeled.jsonl
+make test-all                                              # re-split, retrain, compare
+```
+
+`merge` skips rows that are still unlabelled and messages already in the dataset, and
+keeps the previous dataset as `sms_labeled.jsonl.bak`.
 
 ## Collecting data
 

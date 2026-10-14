@@ -26,13 +26,13 @@ not jsonl directly — this script does the jsonl -> fasttext conversion.
 """
 import os
 import sys
-import re
 import time
 from pathlib import Path
 
 import fasttext
-from hazm import Normalizer, WordTokenizer
+from hazm import WordTokenizer
 from spam_common.data import TEST_FILE, load_texts_labels
+from spam_common.pipeline import preprocess as pipeline_preprocess
 from spam_common.metrics import evaluate as evaluate_preds
 
 try:
@@ -41,23 +41,14 @@ except ImportError:  # progress bar is a nicety, not a hard dependency
     def tqdm(iterable, **kwargs):
         return iterable
 
-_normalizer = Normalizer()
 _word_tokenizer = WordTokenizer()
-_url_re = re.compile(
-    r"(?:https?://[^\s]+)"
-    r"|(?:www\.[^\s]+)"
-    r"|(?:\b[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z0-9\-]+)+(?:/[^\s]*)?)"
-)
 
 
 def preprocess(text: str) -> str:
-    # Same fix as baseline_tfidf.py: mask URLs before normalizing, not after —
-    # otherwise hazm's normalize() breaks the URL apart with spaces first.
-    text = _url_re.sub(" URLTOKEN ", text)
-    text = _normalizer.normalize(text)
-    text = text.replace("\n", " ")
-    tokens = _word_tokenizer.tokenize(text)
-    return " ".join(tokens)
+    # Shared pipeline (anonymize, URL/number masks, hazm), then fastText's
+    # own tokenization: one line per example, space-separated tokens.
+    text = pipeline_preprocess(text).replace("\n", " ")
+    return " ".join(_word_tokenizer.tokenize(text))
 
 
 def load_jsonl(path):

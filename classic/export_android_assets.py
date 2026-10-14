@@ -6,8 +6,10 @@ Generates, from the installed hazm in this venv:
   - hazm_words.txt            full Persian word dictionary (membership checks)
   - hazm_words_positive.txt   words with rank > 0 (token_spacing rank gate)
   - hazm_verbs.txt            conjugated verb forms (seperate_mi/token_spacing)
-  - hazm_fixture.json         curated + deterministic-fuzz inputs -> real hazm
-                              output, consumed by the Kotlin JVM parity test
+  - hazm_fixture.json         curated + deterministic-fuzz inputs -> output of
+                              spam_common.pipeline (each stage and final) and
+                              the model score, consumed by the Kotlin JVM parity test
+  - spam_model.json           TF-IDF + Linear SVM weights and pipelineVersion
 
 Then SELF-VERIFIES a faithful Python port of the same algorithm (consuming only
 the exported data, mirroring what the Kotlin port will do) against real hazm
@@ -26,8 +28,7 @@ import sys
 import joblib
 from hazm import Normalizer, WordTokenizer
 
-sys.path.insert(0, __file__.rsplit("/", 1)[0])
-import baseline_tfidf  # noqa: E402  (reuses _url_re / digit mask / preprocess)
+from spam_common.pipeline import PIPELINE_VERSION, preprocess_stages
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +237,10 @@ def normalize_ha(
 
 
 def preprocess_ha(text, res, words_full, words_positive, verbs) -> str:
-    text = baseline_tfidf._url_re.sub(" URLTOKEN ", text)
-    text = re.sub(r"\d+", " NUM_TOKEN ", text)
+    # Steps before hazm come from the real pipeline; this self-check is
+    # about the hazm port. Kotlin's anonymize/URL/number steps are checked
+    # against the per-stage outputs in the fixture.
+    text = preprocess_stages(text)["numbers"]
     return normalize_ha(text, res, words_full, words_positive, verbs)
 
 
@@ -292,6 +295,31 @@ def build_battery(seed: int = 20260910) -> list:
         "این پیام236 دارای شماره12است",
         "می‌شود", "میشود", "خواهد شد", "خواهدشد",
         "\u200e\u200fRTL\u200e\u200fآزمون",
+        # spam_common.anonymize
+        "رمز شخصی شما 2062761400 است",
+        "رمز موقت ثنا ۹۴۳۷۷۴ انقضا 14:30",
+        "نام کاربری): 403135156 و کلمه عبور: Abc12345",
+        "نام کاربری admin",
+        "نام کاربری: someone@gmail.com",
+        "کد ملی (کلمه عبور) : 0023191589",
+        "کاربر گرامی، به کدملی0023191589 پیامک ارسال شد",
+        "کد پیگیری : 259344302974412",
+        "با شماره پیگیری ۱۲۳۴۵۶ ثبت شد",
+        "Code: 567560 do not share",
+        "code=CHO-24141973",
+        "@digikala.com #54321",
+        "مانده:50,051,391 برداشت:1,000,000",
+        "حساب مقصد: 0303438303006",
+        "حساب:93009",
+        "حساب 123.4567.12345678.1 بانک",
+        "شبا : IR820540102680020817909002",
+        "کارت 6037-9975-1234-5678 و 603799******1234 و 603799*1234",
+        "تماس 021-88776655 یا +989121234567 یا ۰۹۱۲ ۳۴۵ ۶۷۸۹",
+        "کد دستوری *780*1234# را بگیرید",
+        "ارسال عدد 1 به 30001234 لغو 11",
+        "حساب کاربری خود را شارژ کنید",
+        "رمز دستگاه را وارد کنید",
+        "يك كد ى",
     ]
     rng = random.Random(seed)
     letters = "آابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهیینمی"
@@ -353,7 +381,8 @@ def main() -> int:
     words_full, words_positive, verbs = export_lexicons(normalizer)
 
     battery = build_battery()
-    expected_hazm = [baseline_tfidf.preprocess(s) for s in battery]
+    stages = [preprocess_stages(s) for s in battery]
+    expected_hazm = [st["normalize"] for st in stages]
     expected_naive = [preprocess_ha(s, res, words_full, words_positive, verbs) for s in battery]
 
     diffs = 0
@@ -382,7 +411,12 @@ def main() -> int:
     with open(out_tests + "/hazm_fixture.json", "w", encoding="utf-8") as f:
         json.dump(
             {
+                "pipelineVersion": PIPELINE_VERSION,
                 "inputs": battery,
+                # Per-stage outputs so a Kotlin mismatch points at the failing step.
+                "anonymized": [st["anonymize"] for st in stages],
+                "urlsMasked": [st["urls"] for st in stages],
+                "numbersMasked": [st["numbers"] for st in stages],
                 "outputs": expected_hazm,
                 "scores": expected_scores,
                 "seed": 20260910,
@@ -390,7 +424,7 @@ def main() -> int:
             f, ensure_ascii=False, indent=0,
         )
     with open(out_assets + "/spam_model.json", "w", encoding="utf-8") as f:
-        json.dump(export_model(pipe), f, ensure_ascii=False, indent=0)
+        json.dump({**export_model(pipe), "pipelineVersion": PIPELINE_VERSION}, f, ensure_ascii=False, indent=0)
 
     sizes = {
         "words": len(words_full), "words_positive": len(words_positive), "verbs": len(verbs),

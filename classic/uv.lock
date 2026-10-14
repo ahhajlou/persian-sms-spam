@@ -518,6 +518,12 @@ wheels = [
 name = "spam-common"
 version = "0.1.0"
 source = { editable = "../common" }
+dependencies = [
+    { name = "hazm" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "hazm", specifier = ">=0.12.1" }]
 
 [[package]]
 name = "threadpoolctl"

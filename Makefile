@@ -11,6 +11,9 @@ N              ?= 200
 FORCE          ?=
 IN             ?=
 
+# Changing a preprocessing rule retrains every model and rebuilds the split.
+PIPELINE := common/src/spam_common/pipeline.py common/src/spam_common/anonymize.py
+
 TRAIN  := data/train.jsonl
 TEST   := data/test.jsonl
 MODELS := models
@@ -29,7 +32,7 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment regex-label anonymize
+        export-android export-tflite label augment regex-label anonymize merge
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -41,10 +44,14 @@ sync: ## Create/update every uv environment
 
 # --- Data -------------------------------------------------------------------
 
-$(TRAIN) $(TEST) &: $(DATA) common/src/spam_common/split.py
+$(TRAIN) $(TEST) &: $(DATA) common/src/spam_common/split.py $(PIPELINE)
 	$(COMMON) -m spam_common.split $(DATA)
 
 split: $(TRAIN) $(TEST) ## Build the shared, deduplicated train/test split from DATA
+
+merge: ## Add the reviewed file IN to DATA (skips unlabelled and duplicate rows)
+	$(if $(IN),,$(error Set IN=path/to/reviewed.jsonl))
+	$(COMMON) -m spam_common.merge $(IN) --into $(DATA)
 
 label: ## Open the label viewer GUI on DATA
 	$(DATAPREP) data-prep/label_viewer_gui.py $(DATA)
@@ -72,7 +79,7 @@ compare: ## Print the comparison table from the last test runs
 
 # --- TF-IDF + Linear SVM ----------------------------------------------------
 
-$(TFIDF): $(TRAIN) classic/baseline_tfidf.py
+$(TFIDF): $(TRAIN) classic/baseline_tfidf.py $(PIPELINE)
 	@mkdir -p $(MODELS)
 	$(CLASSIC) classic/baseline_tfidf.py train $(TRAIN) $@
 
@@ -90,7 +97,7 @@ export-android: $(TFIDF) ## Export TF-IDF + hazm assets into ANDROID_MODULE
 
 # --- fastText ---------------------------------------------------------------
 
-$(FASTTEXT): $(TRAIN) classic/baseline_fasttext.py
+$(FASTTEXT): $(TRAIN) classic/baseline_fasttext.py $(PIPELINE)
 	@mkdir -p $(MODELS)
 	$(CLASSIC) classic/baseline_fasttext.py train $(TRAIN) $@
 
@@ -110,7 +117,7 @@ train-fasttext-pretrained: $(TRAIN) $(TEST) ## Compare fastText with/without cc.
 
 # --- ParsBERT ---------------------------------------------------------------
 
-$(PARSBERT): $(TRAIN) parsbert/2-fine-tune.py
+$(PARSBERT): $(TRAIN) parsbert/2-fine-tune.py $(PIPELINE)
 	@mkdir -p $(MODELS)
 	$(PARSBERT_PY) parsbert/2-fine-tune.py
 

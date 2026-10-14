@@ -8,7 +8,6 @@ Usage:
 """
 import sys
 import json
-import re
 from pathlib import Path
 
 import joblib
@@ -16,34 +15,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.pipeline import Pipeline
 from spam_common.data import load_texts_labels
+from spam_common.pipeline import preprocess
 from spam_common.metrics import evaluate
-
-# --- Persian-specific normalization ---------------------------------------
-# hazm handles Arabic->Persian char normalization (ي->ی, ك->ک), digit
-# normalization, and extra whitespace/diacritics. This matters a lot more
-# for char n-grams than for word-level features, since inconsistent
-# characters fragment the n-gram vocabulary.
-from hazm import Normalizer
-
-_normalizer = Normalizer()
-_url_re = re.compile(
-    r"(?:https?://[^\s]+)"
-    r"|(?:www\.[^\s]+)"
-    r"|(?:\b[a-zA-Z0-9][a-zA-Z0-9\-]*(?:\.[a-zA-Z0-9\-]+)+(?:/[^\s]*)?)"
-)
-
-
-def preprocess(text: str) -> str:
-    # Mask URLs BEFORE normalizing: hazm's normalize() inserts spaces
-    # around punctuation (e.g. "https://x.ir" -> "https: / / x. ir"),
-    # which breaks the URL apart before a regex could ever match it as
-    # one token. Masking first, then normalizing, keeps URLTOKEN intact
-    # and collapses domain-specific text into one generic signal instead
-    # of the model memorizing individual spam domains.
-    text = _url_re.sub(" URLTOKEN ", text)
-    text = re.sub(r"\d+", " NUM_TOKEN ", text)
-    text = _normalizer.normalize(text)
-    return text
 
 
 # --- Data loading -----------------------------------------------------------

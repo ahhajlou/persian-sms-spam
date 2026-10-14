@@ -6,6 +6,7 @@ from transformers import (
     TrainingArguments,
 )
 from spam_common.data import ID2LABEL, LABEL2ID, MODELS_DIR, TRAIN_FILE, clean_text, load_texts_labels
+from spam_common.pipeline import preprocess
 
 FINAL_MODEL_DIR = MODELS_DIR / "parsbert_spam_final"
 
@@ -21,7 +22,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
 # Train only on the shared training split; data/test.jsonl stays unseen
 # until 5-evaluate.py, so the score is comparable with the other models.
 texts, labels = load_texts_labels(TRAIN_FILE)
-texts = [clean_text(t) for t in texts]
+texts = [clean_text(preprocess(t)) for t in texts]
 labels = [LABEL2ID[label] for label in labels]
 
 

@@ -8,14 +8,21 @@ import random
 from collections import Counter, defaultdict
 
 from spam_common.data import LABELED_FILE, TEST_FILE, TRAIN_FILE, clean_text, load_jsonl, write_jsonl
+from spam_common.pipeline import preprocess
+
+
+def dedup_key(text):
+    return clean_text(preprocess(text))
 
 
 def make_split(rows, test_size=0.2, seed=42):
     # Deduplicate first: the same SMS is often received many times, and a copy
-    # in both train and test would inflate every model's score.
+    # in both train and test would inflate every model's score. Compare what
+    # the model sees, so messages differing only in codes, numbers or links
+    # (e.g. the same OTP template) also count as duplicates.
     unique = {}
     for row in rows:
-        unique.setdefault(clean_text(row["text"]), row)
+        unique.setdefault(dedup_key(row["text"]), row)
 
     # Stratify by label so test keeps the same ham/spam ratio as the data.
     by_label = defaultdict(list)

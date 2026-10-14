@@ -1,7 +1,7 @@
 """Write the hazm data the Rust core needs, from the installed hazm (0.12.x, MIT).
 
-    uv run --project common python core/tools/gen_hazm_data.py            # rules/hazm.json
-    uv run --project common python core/tools/gen_hazm_data.py --lexicons  # + data/lexicons/
+    uv run --project common --group reference python core/tools/gen_hazm_data.py            # rules/hazm.json
+    uv run --project common --group reference python core/tools/gen_hazm_data.py --lexicons  # + data/lexicons/
 
 hazm.json (committed, ~6 KB of rules and character tables) drives the `rules` normalizer.
 The word lists (gitignored, ~14 MB) are only for the `full` normalizer; `make lexicons`

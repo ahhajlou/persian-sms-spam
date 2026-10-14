@@ -1,6 +1,6 @@
 # Plan: one Rust preprocessing core for training and the NoSpam app
 
-Status: Phase 2 done.
+Status: Phase 3a and Phase 4 (this repo) done; next: Phase 3b in NoSpam.
 
 ## How to work through this plan
 
@@ -286,11 +286,22 @@ Done when: both tests pass on the Galaxy A26; release APK classifies with the v5
 
 ### Phase 4: cleanup
 
-- Remove `hazm` from `common`'s dependencies (optional group for `make lexicons` only).
-- Update `CLAUDE.md` and READMEs in both repos; update the design page.
-- This README: describe the dataset (see "What is public"); update "Train your own model" for
-  the Rust toolchain.
-- NoSpam README: replace its build section with the draft below.
+This repo's part is done:
+
+- hazm is out of `classic`'s dependencies and out of `common`'s normal ones. `common` has it in the
+  `reference` group (with scikit-learn and joblib), used by `make lexicons` and `make core-diff`.
+  `classic` keeps it in a `fasttext` group, because `baseline_fasttext.py` tokenizes with hazm's
+  `WordTokenizer`; the Makefile's fastText targets pass `--group fasttext`, so TF-IDF work never
+  installs hazm. (Replacing that tokenizer would change fastText's results, so it was left.)
+- `LICENSE` (GPL-3.0), a dataset description and the Rust requirement in the README, a `core/README.md`,
+  and `CLAUDE.md` and the folder READMEs corrected.
+
+NoSpam's part is in Phase 3b: its README build section (draft below), `CLAUDE.md` and the design page.
+
+Phase 3a results (2026-10-14): `spam-core-jni` exports the four functions with `-Xcheck:jni` tests
+through a JVM started on the host (needs a JDK; skipped with a note otherwise). The model file carries
+`coreGitSha` next to `pipeline`; `make export-android` refuses to run while `core/` has uncommitted
+or untracked files. The release profile (LTO, size) is left for 3b, when the APK size is known.
 
 ### Draft: build section for NoSpam's README
 

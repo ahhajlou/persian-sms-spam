@@ -5,7 +5,15 @@ description = "Shared data loading, preprocessing pipeline, train/test split and
 requires-python = ">=3.13"
 dependencies = [
     "spam-core",  # the Rust preprocessing core (core/spam-core-py), built by maturin
-    "hazm>=0.12.1",  # only for the differential test and `make lexicons`; removed in Phase 4
+]
+
+[dependency-groups]
+# Only for `make lexicons` and `make core-diff` (uv run --group reference). The pipeline
+# itself never imports hazm; its rules and character tables are data in core/spam-core/rules.
+reference = [
+    "hazm>=0.12.1",
+    "joblib>=1.6.0",
+    "scikit-learn>=1.9.0",
 ]
 
 [tool.uv.sources]

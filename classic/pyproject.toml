@@ -6,11 +6,17 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fasttext>=0.9.3",
-    "hazm>=0.12.1",
     "joblib>=1.6.0",
     "numpy<2",
     "scikit-learn>=1.9.0",
     "spam-common",
+]
+
+[dependency-groups]
+# fastText splits words with hazm's WordTokenizer; TF-IDF does not need hazm at all.
+# The Makefile's fastText targets run with `--group fasttext`.
+fasttext = [
+    "hazm>=0.12.1",
 ]
 
 [tool.uv.sources]

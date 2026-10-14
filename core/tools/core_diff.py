@@ -1,6 +1,6 @@
 """Differential test: the Rust core against the Python pipeline it replaces.
 
-    make core-diff                       # uv run --project classic python core/tools/core_diff.py
+    make core-diff                       # uv run --project common --group reference python core/tools/core_diff.py
 
 The reference is the Python implementation as it was before the flip (default: commit
 REF_REV), read straight from git, so this keeps working after the Python rules are deleted:

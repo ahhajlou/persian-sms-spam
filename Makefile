@@ -28,6 +28,8 @@ PARSBERT := $(MODELS)/parsbert_spam_final/model.safetensors
 
 COMMON      := uv run --project common python
 CLASSIC     := uv run --project classic python
+CLASSIC_FT  := uv run --project classic --group fasttext python
+REFERENCE   := uv run --project common --group reference python
 PARSBERT_PY := uv run --project parsbert python
 DATAPREP    := uv run --project data-prep python
 
@@ -51,10 +53,10 @@ core-test: ## Run the Rust core's tests (the `full` normalizer test needs `make 
 	cd core && cargo test
 
 core-diff: ## Compare the Rust core with the old Python pipeline (REF_REV, from git) on the battery, fuzz and DATA
-	$(CLASSIC) core/tools/core_diff.py $(if $(REF_REV),--rev $(REF_REV))
+	$(REFERENCE) core/tools/core_diff.py $(if $(REF_REV),--rev $(REF_REV))
 
 lexicons: ## Write hazm's word lists to core/data/lexicons (only for the `full` normalizer)
-	$(COMMON) core/tools/gen_hazm_data.py --lexicons
+	$(REFERENCE) core/tools/gen_hazm_data.py --lexicons
 
 sync: ## Create/update every uv environment
 	for p in common data-prep classic parsbert; do uv sync --project $$p || exit 1; done
@@ -86,7 +88,7 @@ regex-label: ## First-round label IN with the regex rules -> <IN>_regex.jsonl
 
 # make model-label: which command and which (up-to-date) model file each MODEL uses.
 LABEL_CMD_tfidf    = $(CLASSIC) classic/baseline_tfidf.py label $(TFIDF)
-LABEL_CMD_fasttext = $(CLASSIC) classic/baseline_fasttext.py label $(FASTTEXT)
+LABEL_CMD_fasttext = $(CLASSIC_FT) classic/baseline_fasttext.py label $(FASTTEXT)
 LABEL_CMD_parsbert = $(PARSBERT_PY) parsbert/6-label.py
 LABEL_DEP_tfidf    = $(TFIDF)
 LABEL_DEP_fasttext = $(FASTTEXT)
@@ -132,22 +134,22 @@ export-android: $(TFIDF) ## Export the TF-IDF model + parity fixture into ANDROI
 
 $(FASTTEXT): $(TRAIN) classic/baseline_fasttext.py $(PIPELINE)
 	@mkdir -p $(MODELS)
-	$(CLASSIC) classic/baseline_fasttext.py train $(TRAIN) $@
+	$(CLASSIC_FT) classic/baseline_fasttext.py train $(TRAIN) $@
 
 train-fasttext: $(FASTTEXT) ## Train fastText (+ quantized .ftz for Android)
 
 test-fasttext: $(FASTTEXT) $(TEST) ## Score fastText (full and quantized) on the test set
-	$(CLASSIC) classic/baseline_fasttext.py test $(FASTTEXT) $(TEST)
-	$(CLASSIC) classic/baseline_fasttext.py test $(FASTTEXT:.bin=_quantized.ftz) $(TEST)
+	$(CLASSIC_FT) classic/baseline_fasttext.py test $(FASTTEXT) $(TEST)
+	$(CLASSIC_FT) classic/baseline_fasttext.py test $(FASTTEXT:.bin=_quantized.ftz) $(TEST)
 
 predict-fasttext: $(FASTTEXT) ## Classify TEXT with fastText
-	$(CLASSIC) classic/baseline_fasttext.py predict $(FASTTEXT) "$(TEXT)"
+	$(CLASSIC_FT) classic/baseline_fasttext.py predict $(FASTTEXT) "$(TEXT)"
 
 train-fasttext-pretrained: $(TRAIN) $(TEST) ## Train + score fastText with cc.fa.300 vectors (needs FASTTEXT_VEC); see make compare
 	@test -f $(FASTTEXT_VEC) || { echo "Missing $(FASTTEXT_VEC) — see the classic/baseline_fasttext.py docstring"; exit 1; }
 	@mkdir -p $(MODELS)
-	$(CLASSIC) classic/baseline_fasttext.py train $(TRAIN) $(MODELS)/model-fasttext-cc.bin $(FASTTEXT_VEC)
-	$(CLASSIC) classic/baseline_fasttext.py test $(MODELS)/model-fasttext-cc.bin $(TEST)
+	$(CLASSIC_FT) classic/baseline_fasttext.py train $(TRAIN) $(MODELS)/model-fasttext-cc.bin $(FASTTEXT_VEC)
+	$(CLASSIC_FT) classic/baseline_fasttext.py test $(MODELS)/model-fasttext-cc.bin $(TEST)
 
 # --- ParsBERT ---------------------------------------------------------------
 

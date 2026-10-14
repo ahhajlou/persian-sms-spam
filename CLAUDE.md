@@ -13,6 +13,7 @@ The root `Makefile` is the single entry point; run everything from the repo root
 make sync                    # create/update all four uv environments
 make check                   # unit tests: cargo test (core/) + pytest (common/tests)
 make core-diff               # Rust core vs the old Python pipeline (from git) on battery, fuzz and local data
+make lexicons                # hazm word lists for the `full` normalizer tests (core/data/lexicons)
 uv run --project common --with pytest pytest -q common/tests/test_anonymize.py -k masked   # one test
 make split                   # data/sms_labeled.jsonl -> data/train.jsonl + data/test.jsonl
 make test-all                # (re)train what is out of date, score every model, print comparison
@@ -28,7 +29,10 @@ No Python linter or formatter is configured (Rust: `cargo fmt`, `cargo clippy` i
 **Four separate uv projects** (`common`, `data-prep`, `classic`, `parsbert`), each with its own
 `.venv`, because their dependencies conflict (fastText needs `numpy<2`, ParsBERT needs torch).
 `data-prep`, `classic` and `parsbert` install `common` (package `spam_common`) as an editable
-path dependency. Run a script with `uv run --project <dir> python ...`; the Makefile variables
+path dependency; all four install `spam-core` (the Rust core's Python binding, `core/spam-core-py`)
+the same way, so each `pyproject.toml` has that `[tool.uv.sources]` line. hazm is not a normal
+dependency anywhere: `common` has it in the `reference` group (`make lexicons`, `make core-diff`) and
+`classic` in the `fasttext` group (fastText's tokenizer); the Makefile passes the group. Run a script with `uv run --project <dir> python ...`; the Makefile variables
 `COMMON` / `CLASSIC` / `PARSBERT_PY` / `DATAPREP` do this. A dependency change means
 `uv lock` in that project's directory.
 
@@ -47,13 +51,13 @@ The rules are data in `core/spam-core/rules/`. Any change that alters the output
 Every anonymizer mistake found gets a regression case in `core/spam-core/tests/cases/anonymize.json`
 (masked or must-stay-unchanged lists), which pytest and `cargo test` both read.
 
-**Android parity, and the planned Rust core.** The NoSpam app (`core:ml`) reimplements the pipeline
-in Kotlin and checks a parity fixture written by `make export-android`. The Kotlin side is still at
-pipeline v1 (no anonymizer, old URL rule), so a model exported from this repo now fails NoSpam's
-parity test and must not ship. Don't port the anonymizer to Kotlin: `docs/preprocessing-core-plan.md`
-replaces both implementations with one Rust core (`core/`) that both repos build, keeping hazm's
-regex rules and character tables but not its word lists by default. Follow that plan for
-pipeline work that touches Android.
+**Android parity and the Rust core.** The core (`core/spam-core`, with Python and JNI bindings) is
+done in this repo. The NoSpam app (`core:ml`) still runs its own Kotlin copy at pipeline v1 (no
+anonymizer, old URL rule), so a model exported from this repo fails NoSpam's parity test and must not
+ship until NoSpam adopts the core (Phase 3b of `docs/preprocessing-core-plan.md`, done in NoSpam,
+which builds this repo as a git submodule). Don't port the anonymizer to Kotlin. `make export-android`
+writes the model (with `pipeline` and `coreGitSha`) and a fixture, and refuses to run while `core/`
+has uncommitted changes. Follow the plan for pipeline work that touches Android.
 
 **Makefile as build graph.** Model files and the split are real file targets that depend on the
 training data, their script and `$(PIPELINE)` (`pipeline.py`, `anonymize.py`, and the core's `.rs` and rules files). So editing the
@@ -64,7 +68,7 @@ stay in the repo and are trained only on request.
 text), so repeated SMS or SMS differing only in a code never land in both train and test, and it
 uses a stratified 80/20 split with seed 42. `merge` and `model_label` use the same `dedup_key()`. Test reports
 go to `models/results/<model>.json` with the `pipeline_version` they were scored under, and
-`spam_common.metrics` (`make compare`) tabulates them, marking results from another version with `*`.
+`spam_common.metrics` (`make compare`) tabulates them, marking results from another version or normalizer with `*`.
 
 **Data workflow** (phone export → dataset), each step one file in, one new file out:
 `extract` (adb dump) → `anonymize` (`*_anon.jsonl`) → `model-label MODEL=tfidf|fasttext|parsbert`

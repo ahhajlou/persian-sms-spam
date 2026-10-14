@@ -258,22 +258,28 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fasttext" },
-    { name = "hazm" },
     { name = "joblib" },
     { name = "numpy" },
     { name = "scikit-learn" },
     { name = "spam-common" },
 ]
 
+[package.dev-dependencies]
+fasttext = [
+    { name = "hazm" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fasttext", specifier = ">=0.9.3" },
-    { name = "hazm", specifier = ">=0.12.1" },
     { name = "joblib", specifier = ">=1.6.0" },
     { name = "numpy", specifier = "<2" },
     { name = "scikit-learn", specifier = ">=1.9.0" },
     { name = "spam-common", editable = "../common" },
 ]
+
+[package.metadata.requires-dev]
+fasttext = [{ name = "hazm", specifier = ">=0.12.1" }]
 
 [[package]]
 name = "pybind11"
@@ -519,14 +525,17 @@ name = "spam-common"
 version = "0.1.0"
 source = { editable = "../common" }
 dependencies = [
-    { name = "hazm" },
     { name = "spam-core" },
 ]
 
 [package.metadata]
-requires-dist = [
+requires-dist = [{ name = "spam-core", editable = "../core/spam-core-py" }]
+
+[package.metadata.requires-dev]
+reference = [
     { name = "hazm", specifier = ">=0.12.1" },
-    { name = "spam-core", editable = "../core/spam-core-py" },
+    { name = "joblib", specifier = ">=1.6.0" },
+    { name = "scikit-learn", specifier = ">=1.9.0" },
 ]
 
 [[package]]

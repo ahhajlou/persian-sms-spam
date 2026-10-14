@@ -11,6 +11,11 @@ phone export → extract → anonymize → first-round labels → manual check �
             → train/test split → train three kinds of model → compare → export to Android
 ```
 
+The text preprocessing (anonymizer, URL and number masks, Persian normalizer, character
+n-grams) is a small Rust library in `core/` that training and the NoSpam app both use, so a
+message becomes exactly the same model input in both places. The code is GPL-3.0 licensed
+(see [License](#license)); the dataset it was trained on is private (see [The dataset](#the-dataset)).
+
 ## Models
 
 | Model | Directory | What it is | On the phone |
@@ -20,26 +25,54 @@ phone export → extract → anonymize → first-round labels → manual check �
 | ParsBERT | `parsbert/` | fine-tuned `HooshvareLab/bert-fa-zwnj-base` transformer | TFLite export |
 
 All models train on the same data and are scored on the same held-out test set, so their
-results can be compared directly. Latest results on 219 unseen test messages:
+results can be compared directly. Latest results on 1,756 unseen test messages:
 
 | Model | Accuracy | Macro F1 | Missed spam | Real messages blocked |
 |---|---|---|---|---|
-| fastText | 0.977 | 0.972 | 3 | 2 |
-| ParsBERT | 0.973 | 0.967 | 2 | 4 |
-| TF-IDF | 0.973 | 0.966 | 3 | 3 |
-| fastText quantized | 0.941 | 0.929 | 3 | 10 |
+| TF-IDF | 0.977 | 0.976 | 17 | 23 |
+| fastText | 0.967 | 0.965 | 27 | 31 |
+| ParsBERT | 0.961 | 0.958 | 45 | 24 |
+| fastText quantized | 0.954 | 0.951 | 12 | 69 |
+
+TF-IDF was scored with the current preprocessing (pipeline version 5). The other three were
+last scored with version 4 on the same split and are shown here as they were; re-run them
+with `make test-fasttext` / `make test-parsbert` for a like-for-like table.
 
 For a spam filter, "real messages blocked" is the costliest error: those are messages
 the user never sees.
 
+## The dataset
+
+The dataset is private and is not in this repo (see [Privacy](#privacy)). What it is:
+
+- **Source:** SMS exported from two personal Android phones with NoSpam's Export screen.
+  The two exports hold 20,091 and 2,375 messages; after removing messages that are the same
+  once preprocessed (the same SMS is often received many times, or differs only in a code),
+  8,779 are labeled and used.
+- **Labels:** 5,529 ham and 3,250 spam. The first-round label of each message came from a
+  trained model (`make model-label`), and every message was then checked and corrected by hand
+  in the label GUI (`make label`).
+- **Split:** 80/20, stratified, fixed seed: 7,023 messages for training and 1,756 for testing,
+  with no message (after preprocessing) in both.
+- **Privacy:** passwords, codes, national IDs, card, IBAN and account numbers, phone numbers
+  and emails were masked by the anonymizer before labeling. It does not detect names or street
+  addresses.
+- **Why it is not published:** these are real personal messages. Masking the values the rules
+  know does not make them safe to share, so only the trained TF-IDF weights are published
+  (inside NoSpam), never the messages.
+
+
 ## Repository layout
 
 ```
-common/      spam_common: shared preprocessing pipeline, anonymizer, data helpers, split, merge, metrics
+core/        the Rust preprocessing core (spam-core), its Python and JNI bindings, rules and tests
+common/      spam_common: the pipeline entry point, data helpers, split, merge, metrics
 data-prep/   tools that make the dataset: SMS extraction, regex first-round labels, label GUI, augmentation
 classic/     TF-IDF and fastText models, Android asset export
 parsbert/    ParsBERT fine-tuning, evaluation and TFLite conversion
+docs/        design plan for the Rust core
 Makefile     the single entry point for every command
+LICENSE      GPL-3.0
 data/        your SMS data (not committed)
 models/      trained models and results (not committed)
 ```
@@ -53,13 +86,15 @@ edit data files live in `data-prep/`.
 
 ## Setup
 
-Requirements: [uv](https://docs.astral.sh/uv/) and GNU Make 4.3+. The label GUI uses Qt
+Requirements: [uv](https://docs.astral.sh/uv/), GNU Make 4.3+ and Rust
+([rustup](https://rustup.rs/); it installs the version pinned in `core/rust-toolchain.toml` by
+itself). A JDK is optional: without one the JNI tests in `make check` print `SKIPPED`. The label GUI uses Qt
 (PySide6, installed by `make sync`); on an X11 session Fedora may also need `xcb-util-cursor`.
 A CUDA GPU speeds up ParsBERT but is optional.
 
 ```bash
-make sync     # create every environment (first run downloads torch, so it takes a while)
-make check    # run the unit tests
+make sync     # create every environment and build the Rust core (the first run downloads torch)
+make check    # run the unit tests: cargo test for the core, pytest for the Python code
 make          # list all commands
 ```
 
@@ -76,7 +111,7 @@ make compare               # print the table again from the saved results
 ```
 
 Models are retrained only when the training data, their training script or the
-preprocessing pipeline changed; otherwise `make` reuses them.
+preprocessing pipeline (the Rust core's code or rules) changed; otherwise `make` reuses them.
 
 ### One model at a time
 
@@ -91,9 +126,12 @@ make train-fasttext-pretrained FASTTEXT_VEC=classic/cc.fa.300.vec
 ### Export to Android
 
 ```bash
-make export-android ANDROID_MODULE=/path/to/NoSpam/core/ml   # TF-IDF model + hazm resources + parity fixture
+make export-android ANDROID_MODULE=/path/to/NoSpam/core/ml   # TF-IDF model + parity fixture
 make export-tflite                                           # ParsBERT → models/parsbert_spam.tflite
 ```
+
+`export-android` refuses to run while `core/` has uncommitted changes, and records the commit it
+exported from in the model (`coreGitSha`): NoSpam builds the text processing from that commit.
 
 ## Train your own model
 
@@ -124,10 +162,11 @@ make export-android ANDROID_MODULE=/path/to/NoSpam/core/ml
 writes your weights and a test fixture into your NoSpam checkout; then build NoSpam as usual.
 
 **Not yet possible:** NoSpam's on-device preprocessing is still at pipeline version 1, while
-this repo is at version 4. A model exported now fails NoSpam's parity test and would see
-different input on the phone than in training. The shared Rust core in
-[docs/preprocessing-core-plan.md](docs/preprocessing-core-plan.md) fixes this; until then, keep
-the model NoSpam ships.
+this repo is at version 5. A model exported now fails NoSpam's parity test and would see
+different input on the phone than in training. The shared Rust core is finished in this repo;
+NoSpam switching to it is the last step of
+[docs/preprocessing-core-plan.md](docs/preprocessing-core-plan.md) (Phase 3b). Until that is
+merged, keep the model NoSpam ships.
 
 ## Adding data from a phone
 
@@ -187,27 +226,37 @@ The label GUI's **Label** filter has a **null** option that shows unlabelled mes
 ### Preprocessing
 
 Every model trains and predicts on the output of one function,
-`spam_common.pipeline.preprocess()`:
+`spam_common.pipeline.preprocess()`, which calls the Rust core in `core/spam-core`:
 
 ```
-raw SMS → anonymize → mask URLs → mask numbers → hazm normalize → model
+raw SMS → anonymize → mask URLs → mask numbers → normalize → model
+                                                          └→ character n-grams (TF-IDF)
 ```
+
+Only the first 2,000 characters of a message are used. The rules are data files in
+`core/spam-core/rules/`.
 
 - **anonymize** replaces private values with placeholders such as `[CODE]`, `[CARD]` or
   `[NATID]` (national IDs are detected by their check digit), so the model learns
-  "this is an OTP message", not the code itself. `common/tests/test_anonymize.py` holds
-  the cases it must mask and must leave alone; add one for every mistake you find.
+  "this is an OTP message", not the code itself. `core/spam-core/tests/cases/anonymize.json` holds
+  the cases it must mask and must leave alone (pytest and `cargo test` both read it); add one
+  for every mistake you find.
 - **mask URLs / numbers** turns links (any scheme, `www.`, or a bare domain like `t.me/x`)
   and remaining numbers into `URLTOKEN` and `NUM_TOKEN`.
-- **hazm** normalizes Persian text (letters, digits, spacing, half-spaces).
+- **normalize** applies hazm's regex rules and character tables to Persian text (letters,
+  digits, spacing, half-spaces). hazm's word lists (14 MB) are optional (`make lexicons`) and
+  not used: they made no measurable difference. hazm itself is only needed to regenerate
+  `rules/hazm.json` and for `make core-diff`.
 
-The Android app runs the same steps in Kotlin. `make export-android` writes a fixture with
-the expected output of each step for some 500 test inputs, which the app's JVM test
-checks, so the phone and training can't drift apart silently. The Kotlin port is currently
-at pipeline version 1; [docs/preprocessing-core-plan.md](docs/preprocessing-core-plan.md)
-replaces it with a Rust core shared by both projects. Bump `PIPELINE_VERSION` in
-`pipeline.py` whenever a change alters the output; changing the pipeline retrains every
-model.
+The Android app will run this same Rust core instead of a Kotlin copy, built from the commit
+recorded in the model. `make export-android` writes a fixture with the expected output of each
+step for about 500 test inputs, which the app's tests check, so the phone and training can't
+drift apart silently. The Kotlin port in NoSpam is still at pipeline version 1 until
+[Phase 3b of the plan](docs/preprocessing-core-plan.md) is done.
+
+Bump `PIPELINE_VERSION` (a constant in `core/spam-core/src/lib.rs`) whenever a change alters
+the output: `cargo test` fails until you do, and changing the pipeline retrains every model.
+`make core-diff` compares the core with the old Python pipeline it replaced.
 
 ### Evaluation
 
@@ -216,7 +265,7 @@ model.
   inflate the scores.
 - It keeps the ham/spam ratio in both parts (stratified, 80/20, fixed seed).
 - Each model's report is saved to `models/results/<model>.json`; `make compare` shows them
-  side by side and marks with `*` any result scored under an older pipeline version.
+  side by side and marks with `*` any result scored under another pipeline version or normalizer.
 - Only TF-IDF runs on the phone. `make test-tfidf` is enough when you change the data or the
   pipeline; train fastText and ParsBERT only when you want to compare.
 
@@ -229,4 +278,11 @@ sharing any data.
 
 The only trained artifact that is published is the TF-IDF weights that `make export-android`
 writes into NoSpam (`spam_model.json`): the app needs them on the phone. The dataset itself
-stays private.
+stays private. Note that the weights contain short text fragments (2-4 character n-grams) of the
+training messages; see "Future: min_df" in the plan.
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE). `core/spam-core/rules/hazm.json` is derived from
+[hazm](https://github.com/roshan-research/hazm) (MIT); its copyright notice is in
+`core/spam-core/rules/HAZM-LICENSE.txt`.

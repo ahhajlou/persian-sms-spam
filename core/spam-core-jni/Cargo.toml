@@ -1,0 +1,18 @@
+[package]
+name = "spam-core-jni"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "JNI binding for spam-core, loaded by the NoSpam app as libspam_core_jni.so"
+
+[lib]
+# cdylib for Android; rlib so the tests can call the functions.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "0.21"
+spam-core = { path = "../spam-core" }
+
+[dev-dependencies]
+# Starts a JVM on the host for the tests (needs a JDK; JAVA_HOME or `java` on PATH).
+jni = { version = "0.21", features = ["invocation"] }

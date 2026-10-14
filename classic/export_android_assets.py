@@ -1,15 +1,17 @@
 """Export the TF-IDF + Linear SVM model and a parity fixture for the NoSpam app (core:ml).
 
 Writes:
-  src/main/assets/spam_model.json   vocabulary, idf, weights, bias and the `pipeline`
-                                    (version + normalizer) the model was trained with
+  src/main/assets/spam_model.json   vocabulary, idf, weights, bias, the `pipeline` (version +
+                                    normalizer) the model was trained with and `coreGitSha`, the
+                                    commit of this repo it was exported from
   src/test/resources/spam_fixture.json
                                     the core's battery inputs with every stage's output, the
                                     n-grams and the model score, for the app's parity tests
 
 The text processing itself is not exported: the app builds the same Rust core
-(core/spam-core, see docs/preprocessing-core-plan.md). The Kotlin side still expects the
-old file names and pipeline v1, so what this writes is not shippable until Phase 3.
+(core/spam-core, see docs/preprocessing-core-plan.md) from the commit recorded in
+`coreGitSha`, so this refuses to run while core/ has uncommitted changes. Commit them first.
+(The app's Kotlin side still expects the old file names and pipeline v1 until Phase 3b.)
 
 Usage:
     python export_android_assets.py /abs/path/to/NoSpam/core/ml [--model models/model-tfidf.joblib]
@@ -17,6 +19,7 @@ Usage:
 import argparse
 import json
 import os
+import subprocess
 import sys
 
 import joblib
@@ -27,7 +30,19 @@ from spam_common.pipeline import NORMALIZER, PIPELINE_VERSION, ngrams, preproces
 BATTERY = REPO_ROOT / "core" / "spam-core" / "tests" / "cases" / "battery.json"
 
 
-def export_model(pipe) -> dict:
+def core_git_sha() -> str:
+    """HEAD of this repo, provided core/ is committed (so the SHA names the code that made the model)."""
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=REPO_ROOT, check=True, capture_output=True, text=True).stdout.strip()
+
+    dirty = git("status", "--porcelain", "--untracked-files=normal", "--", "core")
+    if dirty:
+        sys.exit(f"core/ has uncommitted changes ({len(dirty.splitlines())} paths); commit them first so the "
+                 "model records the commit it was exported from.")
+    return git("rev-parse", "HEAD")
+
+
+def export_model(pipe, git_sha) -> dict:
     """The trained TfidfVectorizer + LinearSVC as plain data, enough to reproduce sklearn's
     score: counts of the core's n-grams -> sublinear tf -> idf -> L2 norm -> dot product + bias."""
     vectorizer = pipe.named_steps["tfidf"]
@@ -42,6 +57,7 @@ def export_model(pipe) -> dict:
         "sublinearTf": bool(vectorizer.sublinear_tf),
         "norm": vectorizer.norm,
         "pipeline": {"version": PIPELINE_VERSION, "normalizer": NORMALIZER},
+        "coreGitSha": git_sha,
     }
 
 
@@ -51,13 +67,14 @@ def main() -> int:
     ap.add_argument("--model", default=str(MODELS_DIR / "model-tfidf.joblib"), help="path to model-tfidf.joblib")
     args = ap.parse_args()
 
+    git_sha = core_git_sha()  # before anything is written
     out_assets = os.path.join(args.module_dir, "src", "main", "assets")
     out_tests = os.path.join(args.module_dir, "src", "test", "resources")
     os.makedirs(out_assets, exist_ok=True)
     os.makedirs(out_tests, exist_ok=True)
 
     pipe = joblib.load(args.model)
-    model = export_model(pipe)
+    model = export_model(pipe, git_sha)
 
     battery = json.loads(BATTERY.read_text("utf-8"))
     cases = []
@@ -78,7 +95,7 @@ def main() -> int:
     with open(os.path.join(out_tests, "spam_fixture.json"), "w", encoding="utf-8") as f:
         json.dump({"pipeline": model["pipeline"], "cases": cases}, f, ensure_ascii=False, indent=0)
 
-    print("exported model to", out_assets, "- vocabulary", len(model["vocab"]))
+    print("exported model to", out_assets, "- vocabulary", len(model["vocab"]), "- core commit", git_sha[:12])
     print("exported fixture to", out_tests, "- cases", len(cases))
     return 0
 

@@ -9,7 +9,11 @@ dependencies = [
     "ai-edge-litert>=2.2.0",
     "datasets>=5.0.1",
     "litert-torch>=0.9.4",
+    "spam-common",
     "torch>=2.13.0",
     "torchvision>=0.28.0",
     "transformers>=5.16.1",
 ]
+
+[tool.uv.sources]
+spam-common = { path = "../common", editable = true }

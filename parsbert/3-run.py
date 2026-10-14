@@ -8,11 +8,10 @@
 # print(f"{text=}")
 # print(result)
 
-from pathlib import Path
-
 from transformers import pipeline
+from spam_common.data import MODELS_DIR
 
-MODEL_DIR = str(Path(__file__).resolve().parent.parent / "models/parsbert_spam_final")
+MODEL_DIR = str(MODELS_DIR / "parsbert_spam_final")
 classifier = pipeline("text-classification", model=MODEL_DIR, tokenizer=MODEL_DIR)
 
 def check_spam(text, threshold=0.5):

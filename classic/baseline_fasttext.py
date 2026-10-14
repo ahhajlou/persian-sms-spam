@@ -1,8 +1,8 @@
 """
 Method #2: FastText supervised classifier
 Usage:
-    python baseline_fasttext.py train data.jsonl model.bin
-    python baseline_fasttext.py test  model.bin data.jsonl
+    python baseline_fasttext.py train train.jsonl model.bin
+    python baseline_fasttext.py test  model.bin test.jsonl
     python baseline_fasttext.py predict model.bin "متن پیامک"
 
 Note: fasttext's supervised trainer reads its own plain-text format
@@ -11,13 +11,14 @@ not jsonl directly — this script does the jsonl -> fasttext conversion.
 """
 import os
 import sys
-import json
 import re
 import time
+from pathlib import Path
+
 import fasttext
 from hazm import Normalizer, WordTokenizer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from spam_common.data import load_texts_labels
+from spam_common.metrics import evaluate
 
 try:
     from tqdm import tqdm
@@ -46,14 +47,8 @@ def preprocess(text: str) -> str:
 
 
 def load_jsonl(path):
-    texts, labels = [], []
-    with open(path, encoding="utf-8") as f:
-        lines = [line for line in f if line.strip()]
-    for line in tqdm(lines, desc="Preprocessing", unit="msg"):
-        row = json.loads(line)
-        texts.append(preprocess(row["text"]))
-        labels.append(row["label"])
-    return texts, labels
+    texts, labels = load_texts_labels(path)
+    return [preprocess(t) for t in tqdm(texts, desc="Preprocessing", unit="msg")], labels
 
 
 def write_fasttext_file(texts, labels, path):
@@ -68,14 +63,11 @@ def train(data_path, model_path):
     texts, labels = load_jsonl(data_path)
     print(f"  {len(texts)} rows in {time.time() - t0:.1f}s")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        texts, labels, test_size=0.25, random_state=42, stratify=labels
-    )
-
+    # Evaluation happens separately on the shared test set (`test` command).
     train_txt = model_path + ".train.txt"
-    write_fasttext_file(X_train, y_train, train_txt)
+    write_fasttext_file(texts, labels, train_txt)
 
-    print(f"Training on {len(X_train)} rows (fastText prints its own "
+    print(f"Training on {len(texts)} rows (fastText prints its own "
           f"progress bar below)...")
     t1 = time.time()
     model = fasttext.train_supervised(
@@ -98,10 +90,6 @@ def train(data_path, model_path):
     )
     print(f"Training took {time.time() - t1:.1f}s")
 
-    preds = [model.predict(t)[0][0].replace("__label__", "") for t in X_test]
-    print("=== Held-out evaluation ===")
-    print(classification_report(y_test, preds, digits=3))
-
     model.save_model(model_path)
     # Quantize for on-device deployment: shrinks the model (product
     # quantization on embeddings) with a small, usually acceptable,
@@ -119,7 +107,7 @@ def test(model_path, data_path):
     model = fasttext.load_model(model_path)
     texts, labels = load_jsonl(data_path)
     preds = [model.predict(t)[0][0].replace("__label__", "") for t in texts]
-    print(classification_report(labels, preds, digits=3))
+    evaluate(Path(model_path).stem, labels, preds)
 
 
 def predict(model_path, text):

@@ -1,14 +1,15 @@
 """
 Method #2: FastText supervised classifier
 Usage:
-    python baseline_fasttext.py train data.jsonl model.bin [path/to/cc.fa.300.vec]
-    python baseline_fasttext.py test  model.bin data.jsonl
-    python baseline_fasttext.py predict model.bin "متن پیامک"
+    python fasttext_with_pretrained_vector.py train train.jsonl model.bin [path/to/cc.fa.300.vec]
+    python fasttext_with_pretrained_vector.py test  model.bin test.jsonl
+    python fasttext_with_pretrained_vector.py predict model.bin "متن پیامک"
 
 If a pretrained vectors path is given to `train`, this trains BOTH a
 from-scratch model and a pretrained-vector-initialized model on the same
-train/test split, and prints both reports side by side so you can see
-directly whether the pretrained vectors actually help on your data.
+training data, scores both on the shared test set (data/test.jsonl), and
+prints a side-by-side comparison so you can see directly whether the
+pretrained vectors actually help on your data.
 
 To get pretrained Persian vectors:
     pip install fasttext
@@ -25,13 +26,14 @@ not jsonl directly — this script does the jsonl -> fasttext conversion.
 """
 import os
 import sys
-import json
 import re
 import time
+from pathlib import Path
+
 import fasttext
 from hazm import Normalizer, WordTokenizer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, f1_score, accuracy_score
+from spam_common.data import TEST_FILE, load_texts_labels
+from spam_common.metrics import evaluate as evaluate_preds
 
 try:
     from tqdm import tqdm
@@ -59,14 +61,8 @@ def preprocess(text: str) -> str:
 
 
 def load_jsonl(path):
-    texts, labels = [], []
-    with open(path, encoding="utf-8") as f:
-        lines = [line for line in f if line.strip()]
-    for line in tqdm(lines, desc="Preprocessing", unit="msg"):
-        row = json.loads(line)
-        texts.append(preprocess(row["text"]))
-        labels.append(row["label"])
-    return texts, labels
+    texts, labels = load_texts_labels(path)
+    return [preprocess(t) for t in tqdm(texts, desc="Preprocessing", unit="msg")], labels
 
 
 def write_fasttext_file(texts, labels, path):
@@ -102,27 +98,20 @@ def train_one(train_txt, pretrained_vec_path=None, dim=50):
     return fasttext.train_supervised(**kwargs)
 
 
-def evaluate(model, X_test, y_test, label):
+def evaluate(model, name, X_test, y_test):
     preds = [model.predict(t)[0][0].replace("__label__", "") for t in X_test]
-    print(f"=== {label} ===")
-    print(classification_report(y_test, preds, digits=3))
-    return {
-        "accuracy": accuracy_score(y_test, preds),
-        "f1_macro": f1_score(y_test, preds, average="macro"),
-    }
+    return evaluate_preds(name, y_test, preds)
 
 
-def train(data_path, model_path, pretrained_vec_path=None):
+def train(data_path, model_path, pretrained_vec_path=None, test_path=TEST_FILE):
     t0 = time.time()
     print("Loading + preprocessing...")
-    texts, labels = load_jsonl(data_path)
-    print(f"  {len(texts)} rows in {time.time() - t0:.1f}s")
+    X_train, y_train = load_jsonl(data_path)
+    # Both models below are scored on the shared test set, so the
+    # comparison is fair and matches every other model in the repo.
+    X_test, y_test = load_jsonl(test_path)
+    print(f"  {len(X_train)} train / {len(X_test)} test rows in {time.time() - t0:.1f}s")
 
-    # Same split used for both models below, so the comparison is fair —
-    # different splits would make any difference in scores meaningless.
-    X_train, X_test, y_train, y_test = train_test_split(
-        texts, labels, test_size=0.25, random_state=42, stratify=labels
-    )
     train_txt = model_path + ".train.txt"
     write_fasttext_file(X_train, y_train, train_txt)
 
@@ -130,7 +119,7 @@ def train(data_path, model_path, pretrained_vec_path=None):
     t1 = time.time()
     model_scratch = train_one(train_txt)
     print(f"From-scratch training took {time.time() - t1:.1f}s")
-    scores_scratch = evaluate(model_scratch, X_test, y_test, "From-scratch embeddings (baseline)")
+    scores_scratch = evaluate(model_scratch, Path(model_path).stem, X_test, y_test)
     model_scratch.save_model(model_path)
     print(f"Saved to {model_path}")
 
@@ -139,10 +128,8 @@ def train(data_path, model_path, pretrained_vec_path=None):
         t2 = time.time()
         model_pretrained = train_one(train_txt, pretrained_vec_path=pretrained_vec_path)
         print(f"Pretrained-vector training took {time.time() - t2:.1f}s")
-        scores_pretrained = evaluate(
-            model_pretrained, X_test, y_test, "Pretrained cc.fa.300 embeddings"
-        )
         pretrained_path = model_path.replace(".bin", "_pretrained.bin")
+        scores_pretrained = evaluate(model_pretrained, Path(pretrained_path).stem, X_test, y_test)
         model_pretrained.save_model(pretrained_path)
         print(f"Saved to {pretrained_path}")
 
@@ -158,8 +145,7 @@ def train(data_path, model_path, pretrained_vec_path=None):
 def test(model_path, data_path):
     model = fasttext.load_model(model_path)
     texts, labels = load_jsonl(data_path)
-    preds = [model.predict(t)[0][0].replace("__label__", "") for t in texts]
-    print(classification_report(labels, preds, digits=3))
+    evaluate(model, Path(model_path).stem, texts, labels)
 
 
 def predict(model_path, text):

@@ -1,19 +1,22 @@
 """
 Method #1: TF-IDF (char n-grams) + Linear SVM
 Usage:
-    python baseline_tfidf.py train data.jsonl model.joblib
-    python baseline_tfidf.py test  model.joblib data.jsonl
+    python baseline_tfidf.py train train.jsonl model.joblib
+    python baseline_tfidf.py test  model.joblib test.jsonl
     python baseline_tfidf.py predict model.joblib "متن پیامک"
+    python baseline_tfidf.py export model.joblib model.json
 """
 import sys
 import json
 import re
+from pathlib import Path
+
 import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
+from spam_common.data import load_texts_labels
+from spam_common.metrics import evaluate
 
 # --- Persian-specific normalization ---------------------------------------
 # hazm handles Arabic->Persian char normalization (ي->ی, ك->ک), digit
@@ -45,16 +48,8 @@ def preprocess(text: str) -> str:
 
 # --- Data loading -----------------------------------------------------------
 def load_jsonl(path):
-    texts, labels = [], []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            row = json.loads(line)
-            texts.append(preprocess(row["text"]))
-            labels.append(row["label"])
-    return texts, labels
+    texts, labels = load_texts_labels(path)
+    return [preprocess(t) for t in texts], labels
 
 
 def build_pipeline():
@@ -72,20 +67,11 @@ def build_pipeline():
 
 
 def train(data_path, model_path):
+    # Evaluation happens separately on the shared test set (`test` command).
     texts, labels = load_jsonl(data_path)
-    X_train, X_test, y_train, y_test = train_test_split(
-        texts, labels, test_size=0.25, random_state=42, stratify=labels
-    )
     pipe = build_pipeline()
-    pipe.fit(X_train, y_train)
-
-    preds = pipe.predict(X_test)
-    print("=== Held-out evaluation ===")
-    print(classification_report(y_test, preds, digits=3))
-    print("Confusion matrix (rows=true, cols=pred):")
-    labels_sorted = sorted(set(labels))
-    print(labels_sorted)
-    print(confusion_matrix(y_test, preds, labels=labels_sorted))
+    pipe.fit(texts, labels)
+    print(f"Trained on {len(texts)} rows from {data_path}")
 
     joblib.dump(pipe, model_path)
     print(f"\nSaved model to {model_path}")
@@ -95,7 +81,7 @@ def test(model_path, data_path):
     pipe = joblib.load(model_path)
     texts, labels = load_jsonl(data_path)
     preds = pipe.predict(texts)
-    print(classification_report(labels, preds, digits=3))
+    evaluate(Path(model_path).stem, labels, list(preds))
 
 
 def predict(model_path, text):

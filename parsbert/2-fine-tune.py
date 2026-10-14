@@ -1,6 +1,3 @@
-import json
-from pathlib import Path
-
 from datasets import Dataset
 from transformers import (
     AutoModelForSequenceClassification,
@@ -8,42 +5,29 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
+from spam_common.data import ID2LABEL, LABEL2ID, MODELS_DIR, TRAIN_FILE, clean_text, load_texts_labels
 
-ROOT = Path(__file__).resolve().parent.parent
-SMS_LABELED_FILE = ROOT / "data/sms_labeled.jsonl"
-FINAL_MODEL_DIR = ROOT / "models/parsbert_spam_final"
+FINAL_MODEL_DIR = MODELS_DIR / "parsbert_spam_final"
 
 model_name = "HooshvareLab/bert-fa-zwnj-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForSequenceClassification.from_pretrained(
     model_name, 
-    num_labels=2,
-    id2label={0: "ham", 1: "spam"},
-    label2id={"ham": 0, "spam": 1}
+    num_labels=len(ID2LABEL),
+    id2label=ID2LABEL,
+    label2id=LABEL2ID,
 )
 
-# Replace with your real logged/labeled data
-texts = []
-labels = []  # 1 = spam, 0 = ham
-
-with open(SMS_LABELED_FILE, "r", encoding="utf-8") as file:
-    for line in file:
-        line = line.strip()
-        if line:
-            data = json.loads(line)
-            
-            # FIX 1: Clean newlines and extra spaces
-            clean_text = data["text"].replace("\n", " ").replace("\r", " ").strip()
-            texts.append(clean_text)
-            
-            # FIX 2: Convert string labels to integers (0 for ham, 1 for spam)
-            label_int = 1 if data["label"].lower() == "spam" else 0
-            labels.append(label_int)
+# Train only on the shared training split; data/test.jsonl stays unseen
+# until 5-evaluate.py, so the score is comparable with the other models.
+texts, labels = load_texts_labels(TRAIN_FILE)
+texts = [clean_text(t) for t in texts]
+labels = [LABEL2ID[label] for label in labels]
 
 
-# 3. Create Dataset and Split into Train/Validation (Best Practice)
+# Create Dataset and split off a validation set from the training data
 full_dataset = Dataset.from_dict({"text": texts, "label": labels})
-# Split 90% for training, 10% for validation to check for overfitting
+# Split 90% for training, 10% for validation to pick the best checkpoint
 split_dataset = full_dataset.train_test_split(test_size=0.1, seed=42)
 
 def tokenize(batch):
@@ -55,7 +39,7 @@ tokenized_datasets.set_format(type="torch", columns=["input_ids", "attention_mas
 
 
 training_args = TrainingArguments(
-    output_dir=str(ROOT / "models/parsbert_checkpoints"),
+    output_dir=str(MODELS_DIR / "parsbert_checkpoints"),
     num_train_epochs=4,
     per_device_train_batch_size=8,
     logging_steps=10,

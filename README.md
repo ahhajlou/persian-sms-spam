@@ -1,80 +1,169 @@
 # Persian SMS Spam
 
-Spam/ham classifiers for Persian SMS, trained on messages exported from Android phones.
+Spam filters for Persian (Farsi) SMS. The models are trained on real messages exported
+from Android phones and are built to run on the phone itself: the TF-IDF model is used
+by the NoSpam Android app, and ParsBERT can be exported to TFLite.
 
-| Directory | Approach | Main dependencies |
-|---|---|---|
-| [`common/`](common/) | Shared preprocessing pipeline, anonymizer, data loading, train/test split, metrics (`spam_common`) | hazm |
-| [`data-prep/`](data-prep/) | SMS extraction, regex first-round labelling, label viewer GUI, synthetic spam via local LLM | requests, tkinter |
-| [`classic/`](classic/) | TF-IDF + Linear SVM and fastText, exported as Android assets | scikit-learn, fasttext, hazm |
-| [`parsbert/`](parsbert/) | Fine-tuned ParsBERT (`HooshvareLab/bert-fa-zwnj-base`), exported to TFLite | torch, transformers |
+The repo covers the whole path from a phone export to a model on the phone:
 
-Each directory is an independent [uv](https://docs.astral.sh/uv/) project with its own
-`pyproject.toml`, `uv.lock` and `.venv`, because their dependencies differ widely
-(e.g. `classic` needs `numpy<2` for fastText, `parsbert` pulls in torch).
-The others install `common` as an editable path dependency.
+```
+phone export → extract → anonymize → first-round labels → manual check → merge
+            → train/test split → train three kinds of model → compare → export to Android
+```
+
+## Models
+
+| Model | Directory | What it is | On the phone |
+|---|---|---|---|
+| TF-IDF + Linear SVM | `classic/` | character n-grams with a linear classifier; small and fast | yes (used by the app) |
+| fastText | `classic/` | word embeddings + linear classifier; optional pretrained Persian vectors | quantized `.ftz` |
+| ParsBERT | `parsbert/` | fine-tuned `HooshvareLab/bert-fa-zwnj-base` transformer | TFLite export |
+
+All models train on the same data and are scored on the same held-out test set, so their
+results can be compared directly. Latest results on 219 unseen test messages:
+
+| Model | Accuracy | Macro F1 | Missed spam | Real messages blocked |
+|---|---|---|---|---|
+| fastText | 0.977 | 0.972 | 3 | 2 |
+| TF-IDF | 0.973 | 0.966 | 3 | 3 |
+| ParsBERT | 0.968 | 0.961 | 3 | 4 |
+| fastText quantized | 0.927 | 0.915 | 2 | 14 |
+
+For a spam filter, "real messages blocked" is the costliest error: those are messages
+the user never sees.
+
+## Repository layout
+
+```
+common/      spam_common: shared preprocessing pipeline, anonymizer, data helpers, split, merge, metrics
+data-prep/   tools that make the dataset: SMS extraction, regex first-round labels, label GUI, augmentation
+classic/     TF-IDF and fastText models, Android asset export
+parsbert/    ParsBERT fine-tuning, evaluation and TFLite conversion
+Makefile     the single entry point for every command
+data/        your SMS data (not committed)
+models/      trained models and results (not committed)
+```
+
+Each of `common`, `data-prep`, `classic` and `parsbert` is a separate
+[uv](https://docs.astral.sh/uv/) project with its own environment, because their
+dependencies conflict (fastText needs `numpy<2`, ParsBERT needs torch). The other three
+install `common` as an editable dependency, so shared code exists only once:
+anything a model or the split depends on lives in `common/`; tools that only produce or
+edit data files live in `data-prep/`.
+
+## Setup
+
+Requirements: [uv](https://docs.astral.sh/uv/), GNU Make 4.3+, and for the label GUI the
+system Python's Tk (`sudo dnf install python3-tkinter` on Fedora). A CUDA GPU speeds up
+ParsBERT but is optional.
+
+```bash
+make sync     # create every environment (first run downloads torch, so it takes a while)
+make          # list all commands
+```
 
 ## Usage
 
-The root `Makefile` is the single entry point; it runs each step in the right environment.
+Run everything from the repo root. `make` picks the right environment for each step.
+
+### Train and compare the models
 
 ```bash
-make                  # list all commands
-make split            # data/sms_labeled.jsonl → data/train.jsonl + data/test.jsonl
-make test-all         # train what's out of date, score every model, print a comparison
-make train-tfidf      # or train-fasttext / train-parsbert
-make predict-tfidf TEXT="متن پیامک"
-make export-android ANDROID_MODULE=path/to/core/ml
+make split                 # data/sms_labeled.jsonl → data/train.jsonl + data/test.jsonl
+make test-all              # train what is out of date, score every model, print the table
+make compare               # print the table again from the saved results
 ```
 
-Models are file targets: they are retrained only when `data/train.jsonl`, their
-training script or the preprocessing pipeline changes. `make test-all` therefore fine-tunes ParsBERT when it is out of date.
+Models are retrained only when the training data, their training script or the
+preprocessing pipeline changed; otherwise `make` reuses them.
+
+### One model at a time
+
+```bash
+make train-tfidf                          # or train-fasttext / train-parsbert
+make test-tfidf                           # or test-fasttext / test-parsbert
+make predict-tfidf TEXT="متن پیامک"        # or predict-fasttext
+make run-parsbert                         # type messages, see ParsBERT's verdict
+make train-fasttext-pretrained FASTTEXT_VEC=classic/cc.fa.300.vec
+```
+
+### Export to Android
+
+```bash
+make export-android ANDROID_MODULE=/path/to/NoSpam/core/ml   # TF-IDF model + hazm resources + parity fixture
+make export-tflite                                           # ParsBERT → models/parsbert_spam.tflite
+```
+
+## Adding data from a phone
+
+Every step reads one file and writes a new one next to it, so you can always go back to
+an earlier step. No step overwrites an existing file unless you add `FORCE=1`. The data
+tools only change a message's `text` and `label`; every other field stays as exported.
+
+```bash
+# 0. Only for a raw adb dump (exports from an SMS export app are already JSONL):
+adb shell content query --uri content://sms/ > data/sms_dump.txt
+make extract                                               # → data/sms_unlabeled.jsonl
+
+# 1. Mask private data: passwords, codes, national IDs, card/IBAN/account numbers, phones, emails
+make anonymize   IN=data/<phone>/export.jsonl              # → export_anon.jsonl
+
+# 2. First-round labels from your SpamBlocker regex rules (data/regex_rules.json)
+make regex-label IN=data/<phone>/export_anon.jsonl         # → export_anon_regex.jsonl
+
+# 3. Check and fix the labels by hand, then save in the GUI
+make label     DATA=data/<phone>/export_anon_regex.jsonl
+
+# 4. Add the reviewed messages to the dataset
+make merge       IN=data/<phone>/export_anon_regex.jsonl   # → data/sms_labeled.jsonl
+
+# 5. Re-split, retrain and compare
+make test-all
+```
+
+`merge` skips messages that are still unlabelled or already in the dataset, and keeps the
+previous dataset as `data/sms_labeled.jsonl.bak`. It cannot correct labels of messages
+already in the dataset; fix those with `make label`.
+
+The label GUI's **Label** filter has a **null** option that shows unlabelled messages.
+
+`make augment N=200` can add synthetic spam generated by a local Ollama model.
+
+## How it works
 
 ### Preprocessing
 
-Every model trains and predicts on the output of `spam_common.pipeline.preprocess()`:
+Every model trains and predicts on the output of one function,
+`spam_common.pipeline.preprocess()`:
 
 ```
 raw SMS → anonymize → mask URLs → mask numbers → hazm normalize → model
 ```
 
-The Android app runs the same steps in Kotlin. `make export-android` writes a fixture
-with the expected output of every step for its parity test. Bump `PIPELINE_VERSION`
-whenever a change alters the output. Changing the pipeline retrains every model.
+- **anonymize** replaces private values with placeholders such as `[CODE]`, `[CARD]` or
+  `[NATID]` (national IDs are detected by their check digit), so the model learns
+  "this is an OTP message", not the code itself.
+- **mask URLs / numbers** turns remaining links and numbers into `URLTOKEN` and `NUM_TOKEN`.
+- **hazm** normalizes Persian text (letters, digits, spacing, half-spaces).
+
+The Android app runs the same steps in Kotlin. `make export-android` writes a fixture with
+the expected output of each step for some 500 test inputs, which the app's JVM test
+checks, so the phone and training can't drift apart silently. Bump `PIPELINE_VERSION` in
+`pipeline.py` whenever a change alters the output; changing the pipeline retrains every
+model.
 
 ### Evaluation
 
-Every model trains on `data/train.jsonl` and is scored on the same `data/test.jsonl`.
-The split drops duplicate messages first, compared after preprocessing (the same SMS is
-often received many times, or differs only in a code), so no test message is seen during
-training, and keeps the ham/spam ratio in both parts.
-Results are saved to `models/results/<model>.json`; `make compare` prints them side by side.
+- The split removes duplicates first, compared after preprocessing: the same SMS is often
+  received many times or differs only in a code, and a copy in both train and test would
+  inflate the scores.
+- It keeps the ham/spam ratio in both parts (stratified, 80/20, fixed seed).
+- Each model's report is saved to `models/results/<model>.json`; `make compare` shows them
+  side by side.
 
-## Shared directories (not committed)
+## Privacy
 
-```
-data/     # raw SMS dumps and labelled datasets (sms_labeled.jsonl, train/test split, ...)
-models/   # trained models, checkpoints, exports and results/
-```
-
-Both contain or are derived from personal messages and are listed in `.gitignore`.
-
-## Adding data from a phone
-
-```bash
-make anonymize   IN=data/<phone>/export.jsonl              # mask private data
-make regex-label IN=data/<phone>/export_anon.jsonl         # first-round labels
-make label     DATA=data/<phone>/export_anon_regex.jsonl   # fix labels by hand in the GUI
-make merge       IN=data/<phone>/export_anon_regex.jsonl   # add to data/sms_labeled.jsonl
-make test-all                                              # re-split, retrain, compare
-```
-
-`merge` skips rows that are still unlabelled and messages already in the dataset, and
-keeps the previous dataset as `sms_labeled.jsonl.bak`.
-
-Exports from an SMS export app are already JSONL. For a raw `adb` dump, extract it first:
-
-```bash
-adb shell content query --uri content://sms/ > data/sms_dump.txt
-make extract          # -> data/sms_unlabeled.jsonl, then continue with make anonymize
-```
+`data/` holds real personal messages and `models/` is trained on them. Both are in
+`.gitignore` and must never be committed or published. The anonymizer is rule-based: it
+does not detect person names or street addresses, so check a sample by hand before
+sharing any data.

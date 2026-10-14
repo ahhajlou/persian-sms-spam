@@ -1,0 +1,10 @@
+[project]
+name = "persian-sms-spam-data-prep"
+version = "0.1.0"
+description = "Tools for collecting, labelling and augmenting the Persian SMS dataset"
+requires-python = ">=3.13"
+dependencies = [
+    "arabic-reshaper>=3.0.0",
+    "python-bidi>=0.6.0",
+    "requests>=2.32.0",
+]

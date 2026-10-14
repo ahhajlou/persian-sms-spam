@@ -1,8 +1,11 @@
+from pathlib import Path
+
 import litert_torch
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-model_path = "./parsbert_spam_final"
+ROOT = Path(__file__).resolve().parent.parent
+model_path = ROOT / "models/parsbert_spam_final"
 model = AutoModelForSequenceClassification.from_pretrained(model_path)
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 model.eval()
@@ -33,4 +36,4 @@ else:
     print("Torch:", torch_output.numpy())
     print("Edge:", edge_logits)
 
-edge_model.export("parsbert_spam.tflite")
+edge_model.export(str(ROOT / "models/parsbert_spam.tflite"))

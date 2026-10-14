@@ -1,7 +1,7 @@
 [project]
-name = "spam-filter"
+name = "persian-sms-spam-parsbert"
 version = "0.1.0"
-description = "Add your description here"
+description = "Persian SMS spam classifier: fine-tuned ParsBERT, exported to TFLite"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

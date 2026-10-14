@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv
+venv/
+
+# Personal SMS data — never commit
+data/
+
+# Trained models, checkpoints and training artifacts
+models/
+*.joblib
+*.train.txt
+*.ftz
+*.tflite
+model-tfidf.json
+
+# Pretrained fastText vectors (downloaded by classic/download_fasttext.py)
+cc.fa.300.*

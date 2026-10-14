@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from datasets import Dataset
 from transformers import (
@@ -8,7 +9,9 @@ from transformers import (
     TrainingArguments,
 )
 
-SMS_LABELED_FILE = "/home/amirhossein/Projects/spam-filter/data/sms_labeled.jsonl"
+ROOT = Path(__file__).resolve().parent.parent
+SMS_LABELED_FILE = ROOT / "data/sms_labeled.jsonl"
+FINAL_MODEL_DIR = ROOT / "models/parsbert_spam_final"
 
 model_name = "HooshvareLab/bert-fa-zwnj-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -52,11 +55,12 @@ tokenized_datasets.set_format(type="torch", columns=["input_ids", "attention_mas
 
 
 training_args = TrainingArguments(
-    output_dir="./parsbert_spam_model",
+    output_dir=str(ROOT / "models/parsbert_checkpoints"),
     num_train_epochs=4,
     per_device_train_batch_size=8,
     logging_steps=10,
     save_strategy="epoch",
+    save_total_limit=2, # Keep only the best + latest checkpoint
 
     per_device_eval_batch_size=8,
     eval_strategy="epoch", # Evaluate at the end of each epoch
@@ -72,5 +76,5 @@ trainer = Trainer(
 )
 trainer.train()
 
-model.save_pretrained("./parsbert_spam_final")
-tokenizer.save_pretrained("./parsbert_spam_final")
+model.save_pretrained(FINAL_MODEL_DIR)
+tokenizer.save_pretrained(FINAL_MODEL_DIR)

@@ -1,7 +1,7 @@
 [project]
-name = "spam-filter-optimized"
+name = "persian-sms-spam-classic"
 version = "0.1.0"
-description = "Add your description here"
+description = "Persian SMS spam classifier: TF-IDF + Linear SVM and fastText baselines"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

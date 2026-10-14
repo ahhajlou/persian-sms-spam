@@ -7,7 +7,7 @@ Status: Phase 2 done.
 - One phase at a time, in order. Stop at the phase's "Done when", report the results, and wait
   for the user before starting the next phase.
 - Don't reopen the decisions below; they were made with the user. Ask if something seems wrong.
-- After the user accepts a phase, commit it. NoSpam changes happen only in Phase 3.
+- After the user accepts a phase, commit it. NoSpam changes happen only in Phase 3b.
 - `data/` is private: scripts that read it print counts and metrics, never message text.
 - "Implementation notes" near the end lists the details that are easy to get wrong.
 
@@ -243,17 +243,32 @@ Phase 2 results (2026-10-14):
 
 ### Phase 3: the phone uses the core
 
+Two parts. 3a is done in this repo. 3b is done in a separate session started in
+`~/Github/NoSpam`, after 3a, because it builds on the commit 3a leaves here. The step numbers
+below are kept from the original plan.
+
+#### Phase 3a: this repo (steps 1 and 4)
+
 1. `spam-core-jni`: `pipelineVersion()`, `normalizerMode()`, `ngrams(text)`, `stages(text)`
    (for `feature:mldebug`). Hand-written JNI, not UniFFI: four functions don't justify adding JNA.
    The Rust function names encode the Kotlin class (`com.nospam.nospam.core.ml.NativeCore`),
-   so renaming that class means renaming them.
+   so renaming that class means renaming them. A host-side Rust test calls the exported
+   functions through a JNI environment; cross-compiling for Android is checked in 3b.
+4. `make export-android` writes the model (with `pipeline` and this repo's git SHA) and the
+   fixture into NoSpam. Word lists only for a `full` model. No `.so` files. It refuses to run
+   when `core/` has uncommitted changes, so the SHA it records names the code that made the
+   model.
+
+Done when: the JNI crate's test passes on the host; `make export-android` refuses with
+uncommitted changes in `core/` and records the SHA otherwise.
+
+#### Phase 3b: NoSpam (steps 2, 3, 5, 6, plus its CI, README build section and CLAUDE.md)
+
 2. NoSpam: add this repo as a git submodule (e.g. `third_party/persian-sms-spam`), pinned to
    the commit the model was exported from.
 3. NoSpam `core:ml` Gradle: a task runs `cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64` on the
    submodule into the build directory's `jniLibs` (not into `src/`), and a host (linux-x86_64)
    build for the JVM unit tests. Both run before `merge*JniLibFolders` / the unit test task.
-4. `make export-android` writes the model (with `pipeline` and this repo's git SHA) and the
-   fixture into NoSpam. Word lists only for a `full` model. No `.so` files.
 5. NoSpam `core:ml`: add `NativeCore.kt`; `TfidfSpamClassifier` gets n-grams from it and keeps
    its scoring math. Delete `HazmNormalizer.kt`, `HazmResources.kt`, `TfidfPreprocessor.kt` and
    the hazm assets.
@@ -265,6 +280,7 @@ Phase 2 results (2026-10-14):
    - Unit test: model `pipeline` (version and normalizer) equals `NativeCore`'s. The git SHA is
      not checked, so a model someone trained on their own fork still works; `feature:mldebug`
      shows it.
+7. NoSpam's workflows (see "CI"), the README build section (draft below) and its `CLAUDE.md`.
 
 Done when: both tests pass on the Galaxy A26; release APK classifies with the v5 model.
 

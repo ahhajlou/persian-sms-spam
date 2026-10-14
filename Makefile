@@ -32,7 +32,7 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment regex-label anonymize merge
+        export-android export-tflite label augment regex-label anonymize merge extract
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -55,6 +55,9 @@ merge: ## Add the reviewed file IN to DATA (skips unlabelled and duplicate rows)
 
 label: ## Open the label viewer GUI on DATA
 	$(DATAPREP) data-prep/label_viewer_gui.py $(DATA)
+
+extract: ## Extract data/sms_dump.txt (adb) -> data/sms_unlabeled.jsonl
+	$(DATAPREP) data-prep/extract_sms.py $(if $(FORCE),--force)
 
 anonymize: ## Mask passwords, IDs, cards, phones... in IN -> <IN>_anon.jsonl
 	$(if $(IN),,$(error Set IN=path/to/export.jsonl))

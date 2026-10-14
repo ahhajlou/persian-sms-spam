@@ -71,11 +71,9 @@ make test-all                                              # re-split, retrain, 
 `merge` skips rows that are still unlabelled and messages already in the dataset, and
 keeps the previous dataset as `sms_labeled.jsonl.bak`.
 
-## Collecting data
+Exports from an SMS export app are already JSONL. For a raw `adb` dump, extract it first:
 
 ```bash
 adb shell content query --uri content://sms/ > data/sms_dump.txt
+make extract          # -> data/sms_unlabeled.jsonl, then continue with make anonymize
 ```
-
-Extraction and regex labelling (steps 1–2) are in `parsbert/spam-filter-pipeline.ipynb`
-and write `data/sms_unlabeled.jsonl` and `data/sms_labeled.jsonl`.

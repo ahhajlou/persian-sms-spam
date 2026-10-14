@@ -5,6 +5,7 @@ From the repo root:
 ```bash
 make anonymize IN=data/phone/export.jsonl    # mask sensitive data -> export_anon.jsonl
 make regex-label IN=data/phone/export_anon.jsonl  # first-round labels -> export_anon_regex.jsonl
+make extract                                # adb dump data/sms_dump.txt -> data/sms_unlabeled.jsonl
 make label                                  # label viewer GUI on data/sms_labeled.jsonl
 make label DATA=data/other.jsonl            # ...or on another file
 make augment N=200                          # synthetic spam via a local Ollama model

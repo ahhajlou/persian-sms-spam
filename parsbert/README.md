@@ -11,10 +11,3 @@ uv run 3-run.py              # interactive spam check
 uv run 4-convert-model.py    # → ../models/parsbert_spam.tflite
 uv run 5-evaluate.py         # score on ../data/test.jsonl → ../models/results/
 ```
-
-`spam-filter-pipeline.ipynb` runs the same steps, plus SMS extraction and regex labelling.
-It still trains on the full labelled file rather than the shared split.
-
-```bash
-uv run --with jupyterlab jupyter lab
-```

@@ -1,0 +1,11 @@
+# Link and number masks (pipeline steps 2 and 3), generated from spam_common.pipeline.
+# A match is replaced by `replacement`, with the spaces, so the token stays a word.
+
+[url]
+pattern = '''(?i)(?<![A-Za-z0-9+.\-])[a-z][a-z0-9+.\-]*://[^\x{9}-\x{d}\x{1c}-\x{20}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}-\x{2029}\x{202f}\x{205f}\x{3000}\x{0600}-\x{06FF}\x{200c}-\x{200f}\x{202a}-\x{202e}«»]*(?<![.,!?:;'\")])|(?<![A-Za-z0-9\-.])(?:www\.)?[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*\.[a-z]{2,}(?![a-z0-9\-])(?::[0-9]+)?(?:[/?#][^\x{9}-\x{d}\x{1c}-\x{20}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}-\x{2029}\x{202f}\x{205f}\x{3000}\x{0600}-\x{06FF}\x{200c}-\x{200f}\x{202a}-\x{202e}«»]*(?<![.,!?:;'\")]))?'''
+replacement = " URLTOKEN "
+
+# \p{Nd}: every decimal digit, as Python's \d did (the anonymizer only sees ASCII).
+[number]
+pattern = '''\p{Nd}+'''
+replacement = " NUM_TOKEN "

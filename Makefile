@@ -33,7 +33,8 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment regex-label anonymize merge extract check model-label
+        export-android export-tflite label augment regex-label anonymize merge extract check model-label \
+        core-test lexicons
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -42,6 +43,12 @@ help: ## Show this help
 
 check: ## Run the unit tests (anonymizer regression cases)
 	uv run --project common --with pytest pytest -q common/tests
+
+core-test: ## Run the Rust core's tests (the `full` normalizer test needs `make lexicons`)
+	cd core && cargo test
+
+lexicons: ## Write hazm's word lists to core/data/lexicons (only for the `full` normalizer)
+	$(COMMON) core/tools/gen_hazm_data.py --lexicons
 
 sync: ## Create/update every uv environment
 	for p in common data-prep classic parsbert; do uv sync --project $$p || exit 1; done

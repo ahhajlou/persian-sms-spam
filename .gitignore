@@ -23,3 +23,6 @@ models/
 
 # Pretrained fastText vectors (downloaded by classic/download_fasttext.py)
 cc.fa.300.*
+
+# Rust build output
+target/

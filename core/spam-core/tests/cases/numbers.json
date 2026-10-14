@@ -1,0 +1,62 @@
+[
+ [
+  "",
+  ""
+ ],
+ [
+  "abc",
+  "abc"
+ ],
+ [
+  "123",
+  " NUM_TOKEN "
+ ],
+ [
+  "۱۲۳",
+  " NUM_TOKEN "
+ ],
+ [
+  "٤٥٦",
+  " NUM_TOKEN "
+ ],
+ [
+  "mixed ۱2٣",
+  "mixed  NUM_TOKEN "
+ ],
+ [
+  "a1b22c333",
+  "a NUM_TOKEN b NUM_TOKEN c NUM_TOKEN "
+ ],
+ [
+  "1,000,000 تومان",
+  " NUM_TOKEN , NUM_TOKEN , NUM_TOKEN  تومان"
+ ],
+ [
+  "2.5",
+  " NUM_TOKEN . NUM_TOKEN "
+ ],
+ [
+  "14:30",
+  " NUM_TOKEN : NUM_TOKEN "
+ ],
+ [
+  "１２３ fullwidth",
+  " NUM_TOKEN  fullwidth"
+ ],
+ [
+  "ساعت ۱۴ و 30 دقیقه",
+  "ساعت  NUM_TOKEN  و  NUM_TOKEN  دقیقه"
+ ],
+ [
+  "[NUMBER] [CODE]",
+  "[NUMBER] [CODE]"
+ ],
+ [
+  "0912",
+  " NUM_TOKEN "
+ ],
+ [
+  "x\n12\n",
+  "x\n NUM_TOKEN \n"
+ ]
+]

@@ -8,6 +8,7 @@ TEXT           ?= تخفیف ویژه فقط امروز
 ANDROID_MODULE ?=
 FASTTEXT_VEC   ?= classic/cc.fa.300.vec
 N              ?= 200
+FORCE          ?=
 IN             ?=
 
 TRAIN  := data/train.jsonl
@@ -33,7 +34,7 @@ DATAPREP    := uv run --project data-prep python
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 	@echo
-	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path"
+	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path  FORCE=1"
 
 sync: ## Create/update every uv environment
 	for p in common data-prep classic parsbert; do uv sync --project $$p || exit 1; done
@@ -50,11 +51,11 @@ label: ## Open the label viewer GUI on DATA
 
 anonymize: ## Mask passwords, IDs, cards, phones... in IN -> <IN>_anon.jsonl
 	$(if $(IN),,$(error Set IN=path/to/export.jsonl))
-	$(COMMON) -m spam_common.anonymize $(IN)
+	$(COMMON) -m spam_common.anonymize $(IN) $(if $(FORCE),--force)
 
 regex-label: ## First-round label IN with the regex rules -> <IN>_regex.jsonl
 	$(if $(IN),,$(error Set IN=path/to/export.jsonl))
-	$(DATAPREP) data-prep/regex_label.py $(IN)
+	$(DATAPREP) data-prep/regex_label.py $(IN) $(if $(FORCE),--force)
 
 augment: ## Generate N synthetic spam rows with a local Ollama model
 	$(DATAPREP) data-prep/augment_spam.py $(DATA) data/augmented.jsonl $(N)

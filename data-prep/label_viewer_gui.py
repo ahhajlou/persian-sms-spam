@@ -1,370 +1,375 @@
+"""Review and fix labels by hand (`make label`).
+
+Keys: S = spam, H = ham (both move on to the next message), Up/Down to browse,
+Ctrl+S to save. Qt lays out Persian (RTL) text itself, line by line.
+"""
 import json
 import re
 import sys
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QAbstractItemView, QApplication, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QHeaderView,
+    QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton, QSplitter, QTableWidget,
+    QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+)
 
 from spam_common.data import LABELED_FILE, write_jsonl
 from spam_common.model_label import SCORE_FIELD, UNCERTAIN
 
+LABEL_FILTERS = ["All", "spam", "ham", "null"]
+REGEX_FIELDS = ["text", "address", "both"]
 SCORE_FILTERS = ["All", f"Uncertain ({UNCERTAIN[0]}-{UNCERTAIN[1]})", "Labelled by model", "From dataset"]
 SORT_ORDERS = ["File order", "Most uncertain first"]
+COLUMNS = ["ID", "Label", "Spam score", "Address", "Text preview"]
+PREVIEW_CHARS = 60
 
-# Optional but highly recommended for proper Persian/Arabic RTL display
-try:
-    import arabic_reshaper
-    from bidi.algorithm import get_display
-    RTL_SUPPORT = True
-except ImportError:
-    RTL_SUPPORT = False
 
-class SMSLabelerApp:
-    def __init__(self, root, path=str(LABELED_FILE)):
-        self.root = root
-        self.default_path = path
-        self.root.title("SMS Labeler GUI")
-        self.root.geometry("900x700")
-        
-        # Default font that supports Persian/English well
-        self.default_font = ("Tahoma", 11)
-        self.root.option_add("*Font", self.default_font)
-        
+def filter_indices(data, label_filter="All", pattern="", field="text", score_filter=0, sort=0):
+    """Indices of the rows in `data` that pass the filters, in display order.
+
+    score_filter and sort are indices into SCORE_FILTERS and SORT_ORDERS.
+    Raises re.error for an invalid pattern.
+    """
+    regex = re.compile(pattern, re.IGNORECASE) if pattern else None
+    indices = []
+    for i, item in enumerate(data):
+        # "null" matches rows whose label is missing, null or empty.
+        if label_filter != "All" and (item.get("label") or "null") != label_filter:
+            continue
+
+        score = item.get(SCORE_FIELD)
+        if score_filter == 1 and not (score is not None and UNCERTAIN[0] <= score <= UNCERTAIN[1]):
+            continue
+        if score_filter == 2 and score is None:
+            continue
+        if score_filter == 3 and (SCORE_FIELD not in item or score is not None):
+            continue
+
+        if regex and not (
+            (field in ("address", "both") and regex.search(str(item.get("address", ""))))
+            or (field in ("text", "both") and regex.search(str(item.get("text", ""))))
+        ):
+            continue
+
+        indices.append(i)
+
+    if sort == 1:
+        # Closest to 0.5 first; rows without a score last.
+        def uncertainty(i):
+            score = data[i].get(SCORE_FIELD)
+            return abs(score - 0.5) if score is not None else 1.0
+        indices.sort(key=uncertainty)
+    return indices
+
+
+def read_jsonl_lenient(path):
+    """Rows of a JSONL file, plus the line numbers that are not valid JSON."""
+    rows, bad_lines = [], []
+    with open(path, encoding="utf-8") as f:
+        for line_num, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                bad_lines.append(line_num)
+    return rows, bad_lines
+
+
+def row_values(i, item):
+    score = item.get(SCORE_FIELD)
+    text = " ".join(item.get("text", "").split())
+    if len(text) > PREVIEW_CHARS:
+        text = text[:PREVIEW_CHARS] + "…"
+    return [
+        str(i),
+        item.get("label") or "null",
+        "—" if score is None else f"{score:.2f}",
+        str(item.get("address", "")),
+        text,
+    ]
+
+
+class SMSLabeler(QMainWindow):
+    def __init__(self, path=str(LABELED_FILE)):
+        super().__init__()
         self.data = []
-        self.filtered_indices = []
+        self.filtered = []  # indices into self.data, one per table row
         self.filepath = ""
-        self.current_index = 0  # Track current position in filtered list
+        self.resize(1000, 750)
+        self.setup_ui(path)
+        self.update_title()
 
-        self.setup_ui()
+    def setup_ui(self, path):
+        # --- Controls & filters ---
+        controls = QGroupBox("Controls && Filters")
+        controls_layout = QVBoxLayout(controls)
 
-    def setup_ui(self):
-        # --- Top Frame: File & Filters ---
-        top_frame = ttk.LabelFrame(self.root, text="Controls & Filters", padding=10)
-        top_frame.pack(fill="x", padx=10, pady=5)
+        file_row = QHBoxLayout()
+        file_row.addWidget(QLabel("File:"))
+        self.file_edit = QLineEdit(path)
+        self.file_edit.returnPressed.connect(self.load_from_field)
+        file_row.addWidget(self.file_edit, 1)
+        file_row.addWidget(button("Browse", self.browse_file))
+        file_row.addWidget(button("Load", self.load_from_field))
+        controls_layout.addLayout(file_row)
 
-        # File selection
-        file_frame = ttk.Frame(top_frame)
-        file_frame.pack(fill="x", pady=5)
-        ttk.Label(file_frame, text="File:").pack(side="left")
-        self.file_var = tk.StringVar(value=self.default_path)
-        ttk.Entry(file_frame, textvariable=self.file_var, width=50).pack(side="left", padx=5)
-        ttk.Button(file_frame, text="Browse", command=self.browse_file).pack(side="left")
-        ttk.Button(file_frame, text="Load", command=self.load_data).pack(side="left", padx=5)
-
-        # Filters
-        filter_frame = ttk.Frame(top_frame)
-        filter_frame.pack(fill="x", pady=5)
-
-        ttk.Label(filter_frame, text="Label:").pack(side="left", padx=(0, 5))
-        self.label_var = tk.StringVar(value="All")
-        label_combo = ttk.Combobox(filter_frame, textvariable=self.label_var, values=["All", "spam", "ham", "null"], state="readonly", width=10)
-        label_combo.pack(side="left", padx=5)
-
-        ttk.Label(filter_frame, text="Regex:").pack(side="left", padx=(15, 5))
-        self.regex_var = tk.StringVar()
-        ttk.Entry(filter_frame, textvariable=self.regex_var, width=25).pack(side="left", padx=5)
-
-        ttk.Label(filter_frame, text="Field:").pack(side="left", padx=(0, 5))
-        self.regex_field_var = tk.StringVar(value="text")
-        field_combo = ttk.Combobox(filter_frame, textvariable=self.regex_field_var, values=["text", "address", "both"], state="readonly", width=10)
-        field_combo.pack(side="left", padx=5)
-
-        ttk.Button(filter_frame, text="Apply Filter", command=self.apply_filters).pack(side="left", padx=10)
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Label:"))
+        self.label_combo = combo(LABEL_FILTERS, self.apply_filters)
+        filter_row.addWidget(self.label_combo)
+        filter_row.addSpacing(15)
+        filter_row.addWidget(QLabel("Regex:"))
+        self.regex_edit = QLineEdit()
+        self.regex_edit.setPlaceholderText("Enter to apply")
+        self.regex_edit.returnPressed.connect(self.apply_filters)
+        filter_row.addWidget(self.regex_edit, 1)
+        filter_row.addWidget(QLabel("Field:"))
+        self.field_combo = combo(REGEX_FIELDS, self.apply_filters)
+        filter_row.addWidget(self.field_combo)
+        filter_row.addWidget(button("Apply Filter", self.apply_filters))
+        controls_layout.addLayout(filter_row)
 
         # Model score (written by `make model-label`): review uncertain messages first.
-        score_frame = ttk.Frame(top_frame)
-        score_frame.pack(fill="x", pady=5)
-        ttk.Label(score_frame, text="Model score:").pack(side="left", padx=(0, 5))
-        self.score_var = tk.StringVar(value=SCORE_FILTERS[0])
-        ttk.Combobox(score_frame, textvariable=self.score_var, values=SCORE_FILTERS, state="readonly", width=22).pack(side="left", padx=5)
-        ttk.Label(score_frame, text="Sort:").pack(side="left", padx=(15, 5))
-        self.sort_var = tk.StringVar(value=SORT_ORDERS[0])
-        ttk.Combobox(score_frame, textvariable=self.sort_var, values=SORT_ORDERS, state="readonly", width=20).pack(side="left", padx=5)
+        score_row = QHBoxLayout()
+        score_row.addWidget(QLabel("Model score:"))
+        self.score_combo = combo(SCORE_FILTERS, self.apply_filters)
+        score_row.addWidget(self.score_combo)
+        score_row.addSpacing(15)
+        score_row.addWidget(QLabel("Sort:"))
+        self.sort_combo = combo(SORT_ORDERS, self.apply_filters)
+        score_row.addWidget(self.sort_combo)
+        score_row.addStretch(1)
+        controls_layout.addLayout(score_row)
 
-        # --- Middle Frame: Treeview ---
-        middle_frame = ttk.Frame(self.root)
-        middle_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        # --- Message table ---
+        self.table = QTableWidget(0, len(COLUMNS))
+        self.table.setHorizontalHeaderLabels(COLUMNS)
+        self.table.verticalHeader().hide()
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setWordWrap(False)
+        header = self.table.horizontalHeader()
+        for col, width in enumerate([60, 70, 90, 150]):
+            self.table.setColumnWidth(col, width)
+        header.setSectionResizeMode(len(COLUMNS) - 1, QHeaderView.Stretch)
+        self.table.itemSelectionChanged.connect(self.show_current)
 
-        tree_scroll = ttk.Scrollbar(middle_frame)
-        tree_scroll.pack(side="right", fill="y")
+        # --- Entry details ---
+        details = QGroupBox("Entry Details")
+        details_layout = QVBoxLayout(details)
+        detail_row = QHBoxLayout()
+        self.index_label = QLabel("Index: -")
+        self.position_label = QLabel("")
+        self.position_label.setStyleSheet("color: gray")
+        self.current_label = QLabel("")
+        detail_row.addWidget(self.index_label)
+        detail_row.addWidget(self.position_label)
+        detail_row.addSpacing(20)
+        detail_row.addWidget(QLabel("Label:"))
+        detail_row.addWidget(self.current_label)
+        detail_row.addSpacing(20)
+        detail_row.addWidget(button("Spam (S)", lambda: self.set_label("spam")))
+        detail_row.addWidget(button("Ham (H)", lambda: self.set_label("ham")))
+        detail_row.addStretch(1)
+        detail_row.addWidget(button("◄ Previous", lambda: self.go(-1)))
+        detail_row.addWidget(button("Next ►", lambda: self.go(1)))
+        detail_row.addSpacing(10)
+        detail_row.addWidget(button("Save (Ctrl+S)", self.save_data))
+        details_layout.addLayout(detail_row)
 
-        self.tree = ttk.Treeview(middle_frame, columns=("ID", "Label", "Score", "Address", "Text"), show="headings", yscrollcommand=tree_scroll.set)
-        self.tree.heading("ID", text="ID")
-        self.tree.heading("Label", text="Label")
-        self.tree.heading("Score", text="Spam score")
-        self.tree.heading("Address", text="Address")
-        self.tree.heading("Text", text="Text Preview")
-        
-        self.tree.column("ID", width=50, anchor="center")
-        self.tree.column("Label", width=80, anchor="center")
-        self.tree.column("Score", width=80, anchor="center")
-        self.tree.column("Address", width=150)
-        self.tree.column("Text", width=500)
-        
-        self.tree.pack(side="left", fill="both", expand=True)
-        tree_scroll.config(command=self.tree.yview)
+        self.detail_text = QTextEdit()
+        self.detail_text.setReadOnly(True)
+        font = self.detail_text.font()
+        font.setPointSizeF(font.pointSizeF() + 3)
+        self.detail_text.setFont(font)
+        details_layout.addWidget(self.detail_text)
 
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        splitter = QSplitter(Qt.Vertical)
+        splitter.addWidget(self.table)
+        splitter.addWidget(details)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
 
-        # --- Bottom Frame: Details & Editing ---
-        bottom_frame = ttk.LabelFrame(self.root, text="Entry Details & Editing", padding=10)
-        bottom_frame.pack(fill="x", padx=10, pady=5)
+        central = QWidget()
+        layout = QVBoxLayout(central)
+        layout.addWidget(controls)
+        layout.addWidget(splitter, 1)
+        self.setCentralWidget(central)
 
-        detail_top = ttk.Frame(bottom_frame)
-        detail_top.pack(fill="x", pady=5)
+        # S/H only while the table or the details have focus, so typing a regex is safe.
+        for key, label in (("S", "spam"), ("H", "ham")):
+            shortcut = QShortcut(QKeySequence(key), splitter)
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda label=label: self.set_label(label))
+        QShortcut(QKeySequence.Save, self).activated.connect(self.save_data)
 
-        ttk.Label(detail_top, text="Index:").pack(side="left")
-        self.detail_id_var = tk.StringVar(value="-")
-        ttk.Label(detail_top, textvariable=self.detail_id_var, foreground="blue").pack(side="left", padx=5)
-
-        # Position indicator
-        self.position_var = tk.StringVar(value="")
-        ttk.Label(detail_top, textvariable=self.position_var, foreground="gray").pack(side="left", padx=10)
-
-        ttk.Label(detail_top, text="New Label:").pack(side="left", padx=(20, 5))
-        self.detail_label_var = tk.StringVar(value="ham")
-        detail_label_combo = ttk.Combobox(detail_top, textvariable=self.detail_label_var, values=["spam", "ham"], state="readonly", width=10)
-        detail_label_combo.pack(side="left", padx=5)
-
-        ttk.Button(detail_top, text="Update Label", command=self.update_label).pack(side="left", padx=10)
-        
-        # Navigation buttons
-        nav_frame = ttk.Frame(detail_top)
-        nav_frame.pack(side="right")
-        ttk.Button(nav_frame, text="◄ Previous", command=self.go_previous).pack(side="left", padx=2)
-        ttk.Button(nav_frame, text="Next ►", command=self.go_next).pack(side="left", padx=2)
-
-        ttk.Button(detail_top, text="💾 Save to File", command=self.save_data, style="Accent.TButton").pack(side="right", padx=10)
-
-        # Text display area
-        self.detail_text = tk.Text(bottom_frame, height=6, wrap="word", font=("Tahoma", 12))
-        self.detail_text.pack(fill="x", pady=5)
-        # Configure RTL alignment for Persian text
-        self.detail_text.tag_configure("rtl", justify="right")
-        self.detail_text.config(state="disabled")
-
-        if not RTL_SUPPORT:
-            self.detail_text.config(state="normal")
-            self.detail_text.insert("end", "️ Note: For proper Persian (RTL) display, please run: pip install arabic-reshaper python-bidi")
-            self.detail_text.config(state="disabled")
-
-        # Bind keyboard shortcuts
-        self.root.bind("<Left>", lambda e: self.go_previous())
-        self.root.bind("<Right>", lambda e: self.go_next())
-        self.root.bind("<Up>", lambda e: self.go_previous())
-        self.root.bind("<Down>", lambda e: self.go_next())
+    # --- File handling ---
 
     def browse_file(self):
-        path = filedialog.askopenfilename(
-            title="Select JSONL File",
-            filetypes=[("JSONL files", "*.jsonl"), ("All files", "*.*")],
-            initialfile=self.file_var.get()
-        )
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select JSONL File", self.file_edit.text(), "JSONL files (*.jsonl);;All files (*)")
         if path:
-            self.file_var.set(path)
+            self.file_edit.setText(path)
+            self.load_from_field()
 
-    def load_data(self):
-        path = self.file_var.get()
+    def load_from_field(self):
+        if self.confirm_discard():
+            self.load_data(self.file_edit.text())
+
+    def load_data(self, path):
         try:
-            self.data = []
-            with open(path, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        self.data.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        messagebox.showwarning("Parse Error", f"Invalid JSON on line {line_num}")
-            
-            self.filepath = path
-            self.apply_filters()
-            messagebox.showinfo("Success", f"Loaded {len(self.data)} entries.")
+            data, bad_lines = read_jsonl_lenient(path)
         except FileNotFoundError:
-            messagebox.showerror("Error", "File not found.")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load file: {e}")
-
-    def apply_filters(self):
-        self.filtered_indices = []
-        label_filter = self.label_var.get()
-        regex_pattern = self.regex_var.get()
-        regex_field = self.regex_field_var.get()
-        score_filter = SCORE_FILTERS.index(self.score_var.get())
-
-        try:
-            regex = re.compile(regex_pattern, re.IGNORECASE) if regex_pattern else None
-        except re.error:
-            messagebox.showerror("Regex Error", "Invalid regular expression pattern.")
+            QMessageBox.critical(self, "Error", f"File not found:\n{path}")
+            return
+        except (OSError, UnicodeDecodeError) as e:
+            QMessageBox.critical(self, "Error", f"Failed to load file: {e}")
             return
 
-        for i, item in enumerate(self.data):
-            # 1. Label Filter
-            # "null" matches rows whose label is missing, null or empty.
-            label = item.get("label") or "null"
-            if label_filter != "All" and label != label_filter:
-                continue
-            
-            # 2. Model score filter
-            score = item.get(SCORE_FIELD)
-            if score_filter == 1 and not (score is not None and UNCERTAIN[0] <= score <= UNCERTAIN[1]):
-                continue
-            if score_filter == 2 and score is None:
-                continue
-            if score_filter == 3 and (SCORE_FIELD not in item or score is not None):
-                continue
-
-            # 3. Regex Filter
-            if regex:
-                match = False
-                if regex_field in ['address', 'both'] and regex.search(str(item.get("address", ""))):
-                    match = True
-                if regex_field in ['text', 'both'] and regex.search(str(item.get("text", ""))):
-                    match = True
-                
-                if not match:
-                    continue
-            
-            self.filtered_indices.append(i)
-
-        if self.sort_var.get() == SORT_ORDERS[1]:
-            # Closest to 0.5 first; rows without a score last.
-            def uncertainty(i):
-                score = self.data[i].get(SCORE_FIELD)
-                return abs(score - 0.5) if score is not None else 1.0
-            self.filtered_indices.sort(key=uncertainty)
-
-        self.current_index = 0  # Reset to first entry
-        self.update_treeview()
-        
-        # Auto-select first entry if available
-        if self.filtered_indices:
-            self.select_entry_by_position(0)
-
-    def update_treeview(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        
-        for i in self.filtered_indices:
-            item = self.data[i]
-            text_preview = item.get("text", "")
-            if len(text_preview) > 60:
-                text_preview = text_preview[:60] + "..."
-            
-            self.tree.insert("", "end", iid=i, values=(
-                i, 
-                item.get("label") or "null",
-                "—" if item.get(SCORE_FIELD) is None else f"{item[SCORE_FIELD]:.2f}",
-                item.get("address", ""), 
-                text_preview
-            ))
-
-    def on_select(self, event):
-        selected = self.tree.selection()
-        if not selected:
-            return
-        
-        idx = int(selected[0])
-        # Update current_index based on selection
-        if idx in self.filtered_indices:
-            self.current_index = self.filtered_indices.index(idx)
-        
-        self.display_entry(idx)
-
-    def select_entry_by_position(self, position):
-        """Select entry by position in filtered list"""
-        if not self.filtered_indices or position < 0 or position >= len(self.filtered_indices):
-            return
-        
-        self.current_index = position
-        idx = self.filtered_indices[position]
-        
-        # Select in treeview
-        self.tree.selection_set(idx)
-        self.tree.focus(idx)
-        self.tree.see(idx)
-        
-        self.display_entry(idx)
-
-    def display_entry(self, idx):
-        """Display entry details"""
-        item = self.data[idx]
-        
-        self.detail_id_var.set(f"Index: {idx}")
-        self.position_var.set(f"({self.current_index + 1}/{len(self.filtered_indices)})")
-        self.detail_label_var.set(item.get("label") or "ham")
-        
-        # Update text display with RTL support
-        raw_text = item.get("text", "")
-        display_text = self.format_rtl(raw_text)
-        
-        self.detail_text.config(state="normal")
-        self.detail_text.delete("1.0", "end")
-        self.detail_text.insert("end", display_text)
-        self.detail_text.config(state="disabled")
-
-    def go_previous(self):
-        """Navigate to previous entry"""
-        if not self.filtered_indices:
-            return
-        
-        if self.current_index > 0:
-            self.select_entry_by_position(self.current_index - 1)
-
-    def go_next(self):
-        """Navigate to next entry"""
-        if not self.filtered_indices:
-            return
-        
-        if self.current_index < len(self.filtered_indices) - 1:
-            self.select_entry_by_position(self.current_index + 1)
-
-    def format_rtl(self, text):
-        """Formats text for proper Right-to-Left display if libraries are available."""
-        if RTL_SUPPORT and text:
-            try:
-                reshaped_text = arabic_reshaper.reshape(text)
-                return get_display(reshaped_text)
-            except Exception:
-                pass
-        return text
-
-    def update_label(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Warning", "Please select an entry from the list first.")
-            return
-        
-        idx = int(selected[0])
-        new_label = self.detail_label_var.get()
-        
-        # Update data
-        self.data[idx]["label"] = new_label
-        
-        # Refresh UI
-        self.update_treeview()
-        self.tree.selection_set(idx)
-        self.tree.focus(idx)
-        messagebox.showinfo("Success", f"Entry {idx} label updated to '{new_label}'")
+        self.data, self.filepath = data, path
+        self.file_edit.setText(path)
+        self.setWindowModified(False)
+        self.update_title()
+        self.apply_filters()
+        self.statusBar().showMessage(f"Loaded {len(self.data)} entries.")
+        if bad_lines:
+            shown = ", ".join(map(str, bad_lines[:20])) + (" …" if len(bad_lines) > 20 else "")
+            QMessageBox.warning(self, "Parse Error",
+                                f"Skipped {len(bad_lines)} invalid line(s): {shown}\n"
+                                "Saving will drop them from the file.")
 
     def save_data(self):
         if not self.filepath:
-            messagebox.showwarning("Warning", "No file is currently loaded.")
-            return
-        
+            QMessageBox.warning(self, "Warning", "No file is currently loaded.")
+            return False
         try:
             write_jsonl(self.data, self.filepath)
-            messagebox.showinfo("Success", "File saved successfully!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save file: {e}")
+        except OSError as e:
+            QMessageBox.critical(self, "Error", f"Failed to save file: {e}")
+            return False
+        self.setWindowModified(False)
+        self.statusBar().showMessage(f"Saved {len(self.data)} entries to {self.filepath}")
+        return True
+
+    def confirm_discard(self):
+        """True if it is fine to drop the current data (saved, or the user chose to)."""
+        if not self.isWindowModified():
+            return True
+        answer = QMessageBox.question(
+            self, "Unsaved changes", "Save your label changes first?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel, QMessageBox.Save)
+        if answer == QMessageBox.Save:
+            return self.save_data()
+        return answer == QMessageBox.Discard
+
+    def closeEvent(self, event):
+        if self.confirm_discard():
+            event.accept()
+        else:
+            event.ignore()
+
+    def update_title(self):
+        name = Path(self.filepath).name if self.filepath else "no file"
+        self.setWindowTitle(f"SMS Labeler — {name}[*]")
+
+    # --- Filtering and the table ---
+
+    def apply_filters(self):
+        try:
+            self.filtered = filter_indices(
+                self.data,
+                self.label_combo.currentText(),
+                self.regex_edit.text(),
+                self.field_combo.currentText(),
+                self.score_combo.currentIndex(),
+                self.sort_combo.currentIndex(),
+            )
+        except re.error as e:
+            QMessageBox.critical(self, "Regex Error", f"Invalid regular expression: {e}")
+            return
+
+        self.table.blockSignals(True)
+        self.table.setRowCount(len(self.filtered))
+        for row, i in enumerate(self.filtered):
+            for col, value in enumerate(row_values(i, self.data[i])):
+                cell = QTableWidgetItem(value)
+                if col < 3:
+                    cell.setTextAlignment(Qt.AlignCenter)
+                elif col == 4:
+                    cell.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                self.table.setItem(row, col, cell)
+        self.table.blockSignals(False)
+
+        if self.filtered:
+            self.select_row(0)
+        else:
+            self.show_current()
+        self.table.setFocus()
+
+    def select_row(self, row):
+        if 0 <= row < len(self.filtered):
+            self.table.selectRow(row)
+            self.table.scrollToItem(self.table.item(row, 0))
+
+    def go(self, step):
+        self.select_row(self.table.currentRow() + step)
+
+    def show_current(self):
+        row = self.table.currentRow()
+        if not 0 <= row < len(self.filtered):
+            self.index_label.setText("Index: -")
+            self.position_label.setText(f"(0/{len(self.filtered)})")
+            self.current_label.setText("")
+            self.detail_text.clear()
+            return
+        i = self.filtered[row]
+        item = self.data[i]
+        self.index_label.setText(f"Index: {i}")
+        self.position_label.setText(f"({row + 1}/{len(self.filtered)})")
+        self.current_label.setText(f"<b>{item.get('label') or 'unlabelled'}</b>")
+        self.detail_text.setPlainText(item.get("text", ""))
+
+    def set_label(self, label):
+        """Label the selected message and move on to the next one.
+
+        The row stays in the table until the next filter change, even if it no longer matches.
+        """
+        row = self.table.currentRow()
+        if not 0 <= row < len(self.filtered):
+            return
+        i = self.filtered[row]
+        if self.data[i].get("label") != label:
+            self.data[i]["label"] = label
+            self.table.item(row, 1).setText(label)
+            self.setWindowModified(True)
+        self.statusBar().showMessage(f"Entry {i} → {label}")
+        if row + 1 < len(self.filtered):
+            self.select_row(row + 1)
+        else:
+            self.show_current()
+
+
+def button(text, slot):
+    widget = QPushButton(text)
+    widget.clicked.connect(slot)
+    return widget
+
+
+def combo(values, slot):
+    widget = QComboBox()
+    widget.addItems(values)
+    widget.currentIndexChanged.connect(slot)
+    return widget
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    # Try to set a modern theme if available
-    style = ttk.Style()
-    if 'clam' in style.theme_names():
-        style.theme_use('clam')
-    
-    app = SMSLabelerApp(root, *sys.argv[1:2])
-    app.load_data()
-    root.mainloop()
+    app = QApplication(sys.argv)
+    window = SMSLabeler(*sys.argv[1:2])
+    window.show()
+    window.load_data(window.file_edit.text())
+    sys.exit(app.exec())

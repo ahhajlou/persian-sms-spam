@@ -4,8 +4,7 @@ version = "0.1.0"
 description = "Tools for collecting, labelling and augmenting the Persian SMS dataset"
 requires-python = ">=3.13"
 dependencies = [
-    "arabic-reshaper>=3.0.0",
-    "python-bidi>=0.6.0",
+    "PySide6-Essentials>=6.9",
     "requests>=2.32.0",
     "spam-common",
 ]
@@ -13,7 +12,3 @@ dependencies = [
 [tool.uv.sources]
 spam-common = { path = "../common", editable = true }
 
-[tool.uv]
-# uv's bundled Python ships a Tk that crashes (xcb assertion) on Fedora/Wayland;
-# the system Python's Tk works, and the label viewer GUI needs it.
-python-preference = "only-system"

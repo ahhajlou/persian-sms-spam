@@ -53,9 +53,9 @@ edit data files live in `data-prep/`.
 
 ## Setup
 
-Requirements: [uv](https://docs.astral.sh/uv/), GNU Make 4.3+, and for the label GUI the
-system Python's Tk (`sudo dnf install python3-tkinter` on Fedora). A CUDA GPU speeds up
-ParsBERT but is optional.
+Requirements: [uv](https://docs.astral.sh/uv/) and GNU Make 4.3+. The label GUI uses Qt
+(PySide6, installed by `make sync`); on an X11 session Fedora may also need `xcb-util-cursor`.
+A CUDA GPU speeds up ParsBERT but is optional.
 
 ```bash
 make sync     # create every environment (first run downloads torch, so it takes a while)

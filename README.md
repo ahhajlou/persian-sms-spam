@@ -5,7 +5,7 @@ Spam/ham classifiers for Persian SMS, trained on messages exported from Android 
 | Directory | Approach | Main dependencies |
 |---|---|---|
 | [`common/`](common/) | Shared data paths, loading, train/test split and metrics (`spam_common`) | none |
-| [`data-prep/`](data-prep/) | Label viewer GUI, synthetic spam augmentation via local LLM | requests, tkinter |
+| [`data-prep/`](data-prep/) | Regex first-round labelling, label viewer GUI, synthetic spam augmentation via local LLM | requests, tkinter |
 | [`classic/`](classic/) | TF-IDF + Linear SVM and fastText, exported as Android assets | scikit-learn, fasttext, hazm |
 | [`parsbert/`](parsbert/) | Fine-tuned ParsBERT (`HooshvareLab/bert-fa-zwnj-base`), exported to TFLite | torch, transformers |
 

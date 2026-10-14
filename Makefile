@@ -8,6 +8,7 @@ TEXT           ?= تخفیف ویژه فقط امروز
 ANDROID_MODULE ?=
 FASTTEXT_VEC   ?= classic/cc.fa.300.vec
 N              ?= 200
+IN             ?=
 
 TRAIN  := data/train.jsonl
 TEST   := data/test.jsonl
@@ -27,12 +28,12 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment
+        export-android export-tflite label augment regex-label
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 	@echo
-	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)"
+	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path"
 
 sync: ## Create/update every uv environment
 	for p in common data-prep classic parsbert; do uv sync --project $$p || exit 1; done
@@ -46,6 +47,10 @@ split: $(TRAIN) $(TEST) ## Build the shared, deduplicated train/test split from 
 
 label: ## Open the label viewer GUI on DATA
 	$(DATAPREP) data-prep/label_viewer_gui.py $(DATA)
+
+regex-label: ## First-round label IN with the regex rules -> <IN>_regex.jsonl
+	$(if $(IN),,$(error Set IN=path/to/export.jsonl))
+	$(DATAPREP) data-prep/regex_label.py $(IN)
 
 augment: ## Generate N synthetic spam rows with a local Ollama model
 	$(DATAPREP) data-prep/augment_spam.py $(DATA) data/augmented.jsonl $(N)

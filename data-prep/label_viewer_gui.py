@@ -1,7 +1,8 @@
 """Review and fix labels by hand (`make label`).
 
 Keys: S = spam, H = ham (both move on to the next message), Up/Down to browse,
-Ctrl+S to save. Qt lays out Persian (RTL) text itself, line by line.
+Ctrl+S to save. Shift/Ctrl+click or Ctrl+A select several messages; S/H then label
+them all at once. Qt lays out Persian (RTL) text itself, line by line.
 """
 import json
 import re
@@ -150,7 +151,7 @@ class SMSLabeler(QMainWindow):
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.verticalHeader().hide()
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setWordWrap(False)
         header = self.table.horizontalHeader()
@@ -330,26 +331,45 @@ class SMSLabeler(QMainWindow):
         i = self.filtered[row]
         item = self.data[i]
         self.index_label.setText(f"Index: {i}")
-        self.position_label.setText(f"({row + 1}/{len(self.filtered)})")
+        selected = len(self.selected_rows())
+        self.position_label.setText(
+            f"({row + 1}/{len(self.filtered)}" + (f", {selected} selected)" if selected > 1 else ")"))
         self.current_label.setText(f"<b>{item.get('label') or 'unlabelled'}</b>")
         self.detail_text.setPlainText(item.get("text", ""))
 
-    def set_label(self, label):
-        """Label the selected message and move on to the next one.
+    def selected_rows(self):
+        return sorted(index.row() for index in self.table.selectionModel().selectedRows())
 
-        The row stays in the table until the next filter change, even if it no longer matches.
+    def set_label(self, label):
+        """Label the selected messages.
+
+        One message: move on to the next one. Several: ask first, then keep them selected.
+        Rows stay in the table until the next filter change, even if they no longer match.
         """
-        row = self.table.currentRow()
-        if not 0 <= row < len(self.filtered):
+        rows = self.selected_rows()
+        if not rows:
             return
-        i = self.filtered[row]
-        if self.data[i].get("label") != label:
-            self.data[i]["label"] = label
-            self.table.item(row, 1).setText(label)
+        if len(rows) > 1 and QMessageBox.question(
+                self, "Label selected", f"Label {len(rows)} selected messages as {label}?",
+                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+            return
+        changed = 0
+        for row in rows:
+            i = self.filtered[row]
+            if self.data[i].get("label") != label:
+                self.data[i]["label"] = label
+                self.table.item(row, 1).setText(label)
+                changed += 1
+        if changed:
             self.setWindowModified(True)
-        self.statusBar().showMessage(f"Entry {i} → {label}")
-        if row + 1 < len(self.filtered):
-            self.select_row(row + 1)
+
+        if len(rows) > 1:
+            self.statusBar().showMessage(f"{len(rows)} entries → {label} ({changed} changed)")
+            self.show_current()
+            return
+        self.statusBar().showMessage(f"Entry {self.filtered[rows[0]]} → {label}")
+        if rows[0] + 1 < len(self.filtered):
+            self.select_row(rows[0] + 1)
         else:
             self.show_current()
 

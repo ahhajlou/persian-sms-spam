@@ -2,7 +2,8 @@
 
 Rows whose label is not ham/spam (e.g. null, still unreviewed) are skipped, as
 are messages already in the dataset (compared after preprocessing, like the
-split). The previous dataset is kept as <dataset>.bak.
+split). The review-only model_score field from `make model-label` is dropped.
+The previous dataset is kept as <dataset>.bak.
 
 Usage:
     python -m spam_common.merge reviewed.jsonl [--into data/sms_labeled.jsonl]
@@ -13,6 +14,7 @@ from collections import Counter
 from pathlib import Path
 
 from spam_common.data import LABELED_FILE, LABELS, load_jsonl, write_jsonl
+from spam_common.model_label import SCORE_FIELD
 from spam_common.split import dedup_key
 
 
@@ -30,7 +32,8 @@ def merge(existing, new):
             skipped["duplicate"] += 1
             continue
         seen.add(key)
-        added.append({**row, "label": label})
+        # model_score only guides the review; it never enters the dataset.
+        added.append({**{k: v for k, v in row.items() if k != SCORE_FIELD}, "label": label})
     return added, skipped
 
 

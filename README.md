@@ -99,7 +99,8 @@ make export-tflite                                           # ParsBERT → mode
 
 Every step reads one file and writes a new one next to it, so you can always go back to
 an earlier step. No step overwrites an existing file unless you add `FORCE=1`. The data
-tools only change a message's `text` and `label`; every other field stays as exported.
+tools only change a message's `text` and `label` (plus a review-only `model_score`, see
+step 2); every other field stays as exported.
 
 ```bash
 # 0. Only for a raw adb dump (exports from an SMS export app are already JSONL):
@@ -109,14 +110,14 @@ make extract                                               # → data/sms_unlabe
 # 1. Mask private data: passwords, codes, national IDs, card/IBAN/account numbers, phones, emails
 make anonymize   IN=data/<phone>/export.jsonl              # → export_anon.jsonl
 
-# 2. First-round labels from your SpamBlocker regex rules (data/regex_rules.json)
-make regex-label IN=data/<phone>/export_anon.jsonl         # → export_anon_regex.jsonl
+# 2. First-round labels from a trained model: tfidf (default), fasttext or parsbert
+make model-label IN=data/<phone>/export_anon.jsonl MODEL=tfidf   # → export_anon_model.jsonl
 
 # 3. Check and fix the labels by hand, then save in the GUI
-make label     DATA=data/<phone>/export_anon_regex.jsonl
+make label     DATA=data/<phone>/export_anon_model.jsonl
 
 # 4. Add the reviewed messages to the dataset
-make merge       IN=data/<phone>/export_anon_regex.jsonl   # → data/sms_labeled.jsonl
+make merge       IN=data/<phone>/export_anon_model.jsonl   # → data/sms_labeled.jsonl
 
 # 5. Re-split, retrain and compare
 make test-all
@@ -125,6 +126,23 @@ make test-all
 `merge` skips messages that are still unlabelled or already in the dataset, and keeps the
 previous dataset as `data/sms_labeled.jsonl.bak`. It cannot correct labels of messages
 already in the dataset; fix those with `make label`.
+
+**Step 2** gives messages that are already in the dataset their existing, checked label.
+Every other message gets the model's label and a `model_score`: how sure the model is
+that it is spam (0–1). In the GUI, set **Model score** to *Uncertain* or **Sort** to *Most
+uncertain first* and review those messages carefully; confident ones only need a skim.
+Still review before merging: unchecked model labels would teach the model its own mistakes.
+`merge` drops `model_score`, so it never reaches the dataset.
+
+| `MODEL` | Speed | Use it for |
+|---|---|---|
+| `tfidf` | seconds | everyday labelling; the same model as on the phone |
+| `fasttext` | seconds | a second opinion |
+| `parsbert` | about a minute on a GPU | exports with many new kinds of messages |
+
+`make model-label` first retrains the chosen model if it is out of date. Before you have
+a trained model, `make regex-label IN=...` labels with your SpamBlocker rules in
+`data/regex_rules.json` instead (→ `export_anon_regex.jsonl`); use one of the two, not both.
 
 The label GUI's **Label** filter has a **null** option that shows unlabelled messages.
 

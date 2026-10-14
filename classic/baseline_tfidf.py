@@ -4,9 +4,11 @@ Usage:
     python baseline_tfidf.py train train.jsonl model.joblib
     python baseline_tfidf.py test  model.joblib test.jsonl
     python baseline_tfidf.py predict model.joblib "متن پیامک"
+    python baseline_tfidf.py label model.joblib export.jsonl [--force]   (see spam_common.model_label)
 
 For Android, export with export_android_assets.py (make export-android).
 """
+import math
 import sys
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from sklearn.pipeline import Pipeline
 from spam_common.data import load_texts_labels
 from spam_common.pipeline import preprocess
 from spam_common.metrics import evaluate
+from spam_common.model_label import model_label
 
 
 # --- Data loading -----------------------------------------------------------
@@ -63,6 +66,21 @@ def predict(model_path, text):
     print(f"label={pipe.predict(x)[0]}  score={pipe.decision_function(x)[0]:.3f}")
 
 
+def label(model_path, input_path, force=False):
+    pipe = joblib.load(model_path)
+    sign = 1 if pipe.classes_[1] == "spam" else -1
+
+    def spam_scores(texts):
+        if not texts:
+            return []
+        margins = pipe.decision_function([preprocess(t) for t in texts])
+        # LinearSVC gives a margin, not a probability; a sigmoid maps it to
+        # 0..1 (0.5 = the decision boundary) as a confidence score for review.
+        return [1 / (1 + math.exp(-2 * sign * m)) for m in margins]
+
+    model_label(input_path, spam_scores, Path(model_path).stem, force=force)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "train":
@@ -71,5 +89,7 @@ if __name__ == "__main__":
         test(sys.argv[2], sys.argv[3])
     elif cmd == "predict":
         predict(sys.argv[2], sys.argv[3])
+    elif cmd == "label":
+        label(sys.argv[2], sys.argv[3], force="--force" in sys.argv[4:])
     else:
         print(__doc__)

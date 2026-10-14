@@ -9,6 +9,7 @@ ANDROID_MODULE ?=
 FASTTEXT_VEC   ?= classic/cc.fa.300.vec
 N              ?= 200
 FORCE          ?=
+MODEL          ?= tfidf
 IN             ?=
 
 # Changing a preprocessing rule retrains every model and rebuilds the split.
@@ -32,12 +33,12 @@ DATAPREP    := uv run --project data-prep python
         train-tfidf test-tfidf predict-tfidf \
         train-fasttext test-fasttext predict-fasttext train-fasttext-pretrained \
         train-parsbert test-parsbert run-parsbert \
-        export-android export-tflite label augment regex-label anonymize merge extract check
+        export-android export-tflite label augment regex-label anonymize merge extract check model-label
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
 	@echo
-	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path  FORCE=1"
+	@echo "Variables: DATA=$(DATA)  TEXT=\"...\"  ANDROID_MODULE=path  FASTTEXT_VEC=$(FASTTEXT_VEC)  N=$(N)  IN=path  MODEL=$(MODEL)  FORCE=1"
 
 check: ## Run the unit tests (anonymizer regression cases)
 	uv run --project common --with pytest pytest -q common/tests
@@ -69,6 +70,19 @@ anonymize: ## Mask passwords, IDs, cards, phones... in IN -> <IN>_anon.jsonl
 regex-label: ## First-round label IN with the regex rules -> <IN>_regex.jsonl
 	$(if $(IN),,$(error Set IN=path/to/export.jsonl))
 	$(DATAPREP) data-prep/regex_label.py $(IN) $(if $(FORCE),--force)
+
+# make model-label: which command and which (up-to-date) model file each MODEL uses.
+LABEL_CMD_tfidf    = $(CLASSIC) classic/baseline_tfidf.py label $(TFIDF)
+LABEL_CMD_fasttext = $(CLASSIC) classic/baseline_fasttext.py label $(FASTTEXT)
+LABEL_CMD_parsbert = $(PARSBERT_PY) parsbert/6-label.py
+LABEL_DEP_tfidf    = $(TFIDF)
+LABEL_DEP_fasttext = $(FASTTEXT)
+LABEL_DEP_parsbert = $(PARSBERT)
+
+model-label: $(LABEL_DEP_$(MODEL)) ## First-round label IN with MODEL=tfidf|fasttext|parsbert -> <IN>_model.jsonl
+	$(if $(IN),,$(error Set IN=path/to/export.jsonl))
+	$(if $(LABEL_CMD_$(MODEL)),,$(error MODEL must be tfidf, fasttext or parsbert))
+	$(LABEL_CMD_$(MODEL)) $(IN) $(if $(FORCE),--force)
 
 augment: ## Generate N synthetic spam rows with a local Ollama model
 	$(DATAPREP) data-prep/augment_spam.py $(DATA) data/augmented.jsonl $(N)

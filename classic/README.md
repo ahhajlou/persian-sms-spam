@@ -9,4 +9,5 @@ Lightweight models that run on-device without a neural network runtime.
 
 Run them via the root Makefile (`make help`), or directly from this directory,
 e.g. `uv run baseline_tfidf.py predict ../models/model-tfidf.joblib "متن پیامک"`.
-Each script's docstring lists its commands.
+Each script's docstring lists its commands; both models also have a `label` command
+used by `make model-label`.

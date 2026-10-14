@@ -5,6 +5,10 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from spam_common.data import LABELED_FILE, write_jsonl
+from spam_common.model_label import SCORE_FIELD, UNCERTAIN
+
+SCORE_FILTERS = ["All", f"Uncertain ({UNCERTAIN[0]}-{UNCERTAIN[1]})", "Labelled by model", "From dataset"]
+SORT_ORDERS = ["File order", "Most uncertain first"]
 
 # Optional but highly recommended for proper Persian/Arabic RTL display
 try:
@@ -66,6 +70,16 @@ class SMSLabelerApp:
 
         ttk.Button(filter_frame, text="Apply Filter", command=self.apply_filters).pack(side="left", padx=10)
 
+        # Model score (written by `make model-label`): review uncertain messages first.
+        score_frame = ttk.Frame(top_frame)
+        score_frame.pack(fill="x", pady=5)
+        ttk.Label(score_frame, text="Model score:").pack(side="left", padx=(0, 5))
+        self.score_var = tk.StringVar(value=SCORE_FILTERS[0])
+        ttk.Combobox(score_frame, textvariable=self.score_var, values=SCORE_FILTERS, state="readonly", width=22).pack(side="left", padx=5)
+        ttk.Label(score_frame, text="Sort:").pack(side="left", padx=(15, 5))
+        self.sort_var = tk.StringVar(value=SORT_ORDERS[0])
+        ttk.Combobox(score_frame, textvariable=self.sort_var, values=SORT_ORDERS, state="readonly", width=20).pack(side="left", padx=5)
+
         # --- Middle Frame: Treeview ---
         middle_frame = ttk.Frame(self.root)
         middle_frame.pack(fill="both", expand=True, padx=10, pady=5)
@@ -73,14 +87,16 @@ class SMSLabelerApp:
         tree_scroll = ttk.Scrollbar(middle_frame)
         tree_scroll.pack(side="right", fill="y")
 
-        self.tree = ttk.Treeview(middle_frame, columns=("ID", "Label", "Address", "Text"), show="headings", yscrollcommand=tree_scroll.set)
+        self.tree = ttk.Treeview(middle_frame, columns=("ID", "Label", "Score", "Address", "Text"), show="headings", yscrollcommand=tree_scroll.set)
         self.tree.heading("ID", text="ID")
         self.tree.heading("Label", text="Label")
+        self.tree.heading("Score", text="Spam score")
         self.tree.heading("Address", text="Address")
         self.tree.heading("Text", text="Text Preview")
         
         self.tree.column("ID", width=50, anchor="center")
         self.tree.column("Label", width=80, anchor="center")
+        self.tree.column("Score", width=80, anchor="center")
         self.tree.column("Address", width=150)
         self.tree.column("Text", width=500)
         
@@ -173,6 +189,7 @@ class SMSLabelerApp:
         label_filter = self.label_var.get()
         regex_pattern = self.regex_var.get()
         regex_field = self.regex_field_var.get()
+        score_filter = SCORE_FILTERS.index(self.score_var.get())
 
         try:
             regex = re.compile(regex_pattern, re.IGNORECASE) if regex_pattern else None
@@ -187,7 +204,16 @@ class SMSLabelerApp:
             if label_filter != "All" and label != label_filter:
                 continue
             
-            # 2. Regex Filter
+            # 2. Model score filter
+            score = item.get(SCORE_FIELD)
+            if score_filter == 1 and not (score is not None and UNCERTAIN[0] <= score <= UNCERTAIN[1]):
+                continue
+            if score_filter == 2 and score is None:
+                continue
+            if score_filter == 3 and (SCORE_FIELD not in item or score is not None):
+                continue
+
+            # 3. Regex Filter
             if regex:
                 match = False
                 if regex_field in ['address', 'both'] and regex.search(str(item.get("address", ""))):
@@ -199,7 +225,14 @@ class SMSLabelerApp:
                     continue
             
             self.filtered_indices.append(i)
-        
+
+        if self.sort_var.get() == SORT_ORDERS[1]:
+            # Closest to 0.5 first; rows without a score last.
+            def uncertainty(i):
+                score = self.data[i].get(SCORE_FIELD)
+                return abs(score - 0.5) if score is not None else 1.0
+            self.filtered_indices.sort(key=uncertainty)
+
         self.current_index = 0  # Reset to first entry
         self.update_treeview()
         
@@ -220,6 +253,7 @@ class SMSLabelerApp:
             self.tree.insert("", "end", iid=i, values=(
                 i, 
                 item.get("label") or "null",
+                "—" if item.get(SCORE_FIELD) is None else f"{item[SCORE_FIELD]:.2f}",
                 item.get("address", ""), 
                 text_preview
             ))

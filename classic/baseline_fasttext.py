@@ -4,6 +4,7 @@ Usage:
     python baseline_fasttext.py train train.jsonl model.bin [cc.fa.300.vec]
     python baseline_fasttext.py test  model.bin test.jsonl
     python baseline_fasttext.py predict model.bin "متن پیامک"
+    python baseline_fasttext.py label model.bin export.jsonl [--force]   (see spam_common.model_label)
 
 `train` also writes a quantized <model>_quantized.ftz for Android.
 
@@ -27,6 +28,7 @@ from hazm import WordTokenizer
 from spam_common.data import load_texts_labels
 from spam_common.pipeline import preprocess as pipeline_preprocess
 from spam_common.metrics import evaluate
+from spam_common.model_label import model_label
 
 try:
     from tqdm import tqdm
@@ -118,6 +120,19 @@ def predict(model_path, text):
     print(f"label={label[0].replace('__label__', '')}  prob={prob[0]:.3f}")
 
 
+def label(model_path, input_path, force=False):
+    model = fasttext.load_model(model_path)
+
+    def spam_scores(texts):
+        scores = []
+        for t in texts:
+            labels, probs = model.predict(preprocess(t), k=-1)
+            scores.append(dict(zip(labels, probs)).get("__label__spam", 0.0))
+        return scores
+
+    model_label(input_path, spam_scores, Path(model_path).stem, force=force)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "train":
@@ -126,5 +141,7 @@ if __name__ == "__main__":
         test(sys.argv[2], sys.argv[3])
     elif cmd == "predict":
         predict(sys.argv[2], sys.argv[3])
+    elif cmd == "label":
+        label(sys.argv[2], sys.argv[3], force="--force" in sys.argv[4:])
     else:
         print(__doc__)

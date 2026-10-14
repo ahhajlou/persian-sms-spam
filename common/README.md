@@ -9,6 +9,7 @@ and `data-prep` via `[tool.uv.sources]`. Its only dependency is hazm.
 - `anonymize.py`: rule-based masking of passwords, codes, IDs, card/account numbers, phones, emails
 - `split.py`: deduplicated, stratified train/test split
 - `merge.py`: adds a reviewed file to the labelled dataset
+- `model_label.py`: first-round labels with a trained model (each model's `label` command)
 - `metrics.py`: `evaluate()` saves a model's test report; running it compares all saved reports
 
 Rule: anything a model or the split depends on lives here, so the logic exists once.

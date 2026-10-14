@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
-from spam_common.data import LABELED_FILE, write_jsonl
+from spam_common.data import DATA_DIR, write_jsonl
 from spam_common.model_label import SCORE_FIELD, UNCERTAIN
 
 LABEL_FILTERS = ["All", "spam", "ham", "null"]
@@ -95,7 +95,7 @@ def row_values(i, item):
 
 
 class SMSLabeler(QMainWindow):
-    def __init__(self, path=str(LABELED_FILE)):
+    def __init__(self, path=""):
         super().__init__()
         self.data = []
         self.filtered = []  # indices into self.data, one per table row
@@ -112,6 +112,7 @@ class SMSLabeler(QMainWindow):
         file_row = QHBoxLayout()
         file_row.addWidget(QLabel("File:"))
         self.file_edit = QLineEdit(path)
+        self.file_edit.setPlaceholderText("Browse for a JSONL file, or type a path and press Enter")
         self.file_edit.returnPressed.connect(self.load_from_field)
         file_row.addWidget(self.file_edit, 1)
         file_row.addWidget(button("Browse", self.browse_file))
@@ -213,7 +214,8 @@ class SMSLabeler(QMainWindow):
 
     def browse_file(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select JSONL File", self.file_edit.text(), "JSONL files (*.jsonl);;All files (*)")
+            self, "Select JSONL File", self.file_edit.text() or str(DATA_DIR),
+            "JSONL files (*.jsonl);;All files (*)")
         if path:
             self.file_edit.setText(path)
             self.load_from_field()
@@ -391,5 +393,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SMSLabeler(*sys.argv[1:2])
     window.show()
-    window.load_data(window.file_edit.text())
+    # Start empty unless a file was given on the command line.
+    if window.file_edit.text():
+        window.load_data(window.file_edit.text())
     sys.exit(app.exec())

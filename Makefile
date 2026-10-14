@@ -57,8 +57,8 @@ merge: ## Add the reviewed file IN to DATA (skips unlabelled and duplicate rows)
 	$(if $(IN),,$(error Set IN=path/to/reviewed.jsonl))
 	$(COMMON) -m spam_common.merge $(IN) --into $(DATA)
 
-label: ## Open the label viewer GUI on DATA
-	$(DATAPREP) data-prep/label_viewer_gui.py $(DATA)
+label: ## Open the label viewer GUI (on DATA only if DATA is given)
+	$(DATAPREP) data-prep/label_viewer_gui.py $(if $(filter file,$(origin DATA)),,$(DATA))
 
 extract: ## Extract data/sms_dump.txt (adb) -> data/sms_unlabeled.jsonl
 	$(DATAPREP) data-prep/extract_sms.py $(if $(FORCE),--force)

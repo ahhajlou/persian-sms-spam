@@ -125,7 +125,7 @@ make test-all
 
 `merge` skips messages that are still unlabelled or already in the dataset, and keeps the
 previous dataset as `data/sms_labeled.jsonl.bak`. It cannot correct labels of messages
-already in the dataset; fix those with `make label`.
+already in the dataset; fix those with `make label DATA=data/sms_labeled.jsonl`.
 
 **Step 2** gives messages that are already in the dataset their existing, checked label.
 Every other message gets the model's label and a `model_score`: how sure the model is

@@ -13,8 +13,7 @@ street addresses are NOT detected.
        balances and transaction amounts, account numbers.
     4. Any remaining run of 8+ digits becomes [NUMBER].
 
-Phone-number senders in `address` become a stable pseudonym (PHONE_<hash>)
-keyed by a salt in data/.anonymize_salt; service senders (e.g. "Hamta") stay.
+Only `text` is changed; every other field of a row is kept as it is.
 
 Usage:
     python -m spam_common.anonymize input.jsonl [output.jsonl] [--force]
@@ -22,17 +21,11 @@ Usage:
 The output defaults to <input>_anon.jsonl and is never overwritten without --force.
 """
 import argparse
-import hashlib
-import json
 import re
-import secrets
 from collections import Counter
 from pathlib import Path
 
-from spam_common.data import DATA_DIR, load_jsonl, output_path, write_jsonl
-
-SALT_FILE = DATA_DIR / ".anonymize_salt"
-DROP_FIELDS = ("installId", "hwid")  # identify the device
+from spam_common.data import load_jsonl, output_path, write_jsonl
 
 _TRANSLATE = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩يكى", "01234567890123456789یکی")
 
@@ -114,29 +107,10 @@ def anonymize(text, counts=None):
     return text
 
 
-def load_salt():
-    if not SALT_FILE.exists():
-        SALT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        SALT_FILE.write_text(secrets.token_hex(16), encoding="utf-8")
-    return SALT_FILE.read_text(encoding="utf-8").strip()
-
-
-def pseudonymize_address(address, salt):
-    """Hash personal phone numbers; keep service senders and short codes."""
-    plain = normalize(address or "")
-    digits = re.sub(r"[\s\-+]", "", plain)
-    if not (digits.isdigit() and len(digits) >= 10):
-        return address
-    canonical = "0" + digits[-10:]  # +98912..., 0098912..., 0912... -> same pseudonym
-    return "PHONE_" + hashlib.sha256((salt + canonical).encode()).hexdigest()[:8]
-
-
-def anonymize_row(row, salt, counts=None):
-    row = {k: v for k, v in row.items() if k not in DROP_FIELDS}
+def anonymize_row(row, counts=None):
+    """Anonymize `text` only; all other fields are left untouched."""
     if row.get("text"):
-        row["text"] = anonymize(row["text"], counts)
-    if "address" in row:
-        row["address"] = pseudonymize_address(row["address"], salt)
+        row = {**row, "text": anonymize(row["text"], counts)}
     return row
 
 
@@ -148,10 +122,8 @@ def main():
     args = ap.parse_args()
 
     output = output_path(args.input, "anon", args.output, args.force)
-
-    salt = load_salt()
     counts = Counter()
-    rows = [anonymize_row(row, salt, counts) for row in load_jsonl(args.input)]
+    rows = [anonymize_row(row, counts) for row in load_jsonl(args.input)]
     write_jsonl(rows, output)
 
     print(f"{len(rows)} messages -> {output}")

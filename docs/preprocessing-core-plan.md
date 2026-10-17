@@ -1,6 +1,7 @@
 # Plan: one Rust preprocessing core for training and the NoSpam app
 
-Status: Phase 3a and Phase 4 (this repo) done; next: Phase 3b in NoSpam.
+Status: all phases done; Phase 3b shipped in NoSpam (PRs #61 and #62, merged 2026-10-16).
+The plan is complete apart from "Future: min_df", which stays open.
 
 ## How to work through this plan
 
@@ -284,6 +285,31 @@ uncommitted changes in `core/` and records the SHA otherwise.
 
 Done when: both tests pass on the Galaxy A26; release APK classifies with the v5 model.
 
+Phase 3b results (NoSpam, 2026-10-15 to 2026-10-17):
+
+- Shipped in NoSpam PRs #61 and #62 (merged 2026-10-16): submodule `third_party/persian-sms-spam`
+  pinned to `d298fbe`, model exported at `d298fbe` (pipeline v5, `rules` normalizer, 50,033
+  n-grams, `coreGitSha` = `d298fbe`). `make test-tfidf` after the export: 40 errors on 1,756 test
+  messages (17 missed spam, 23 blocked ham), accuracy 0.977, macro F1 0.976.
+- "Done when" is met. The parity fixture (512 cases: every stage, the n-grams, scores within
+  1e-6) passes on the host build and on devices: arm64-v8a and armeabi-v7a on a Galaxy A26,
+  x86_64 on an emulator with 16 KB pages. The release APK classifies with the v5 model, and real
+  SMS on an emulator scored the same as in training to 10 decimal places.
+- Release profile (left open in 3a): LTO with `codegen-units=1`, 13% smaller libraries at the same
+  speed. NoSpam's Gradle build sets it through `CARGO_PROFILE_RELEASE_*` environment variables, not
+  in `core/Cargo.toml`, so the submodule stays at the commit the model was exported from. `panic`
+  stays `unwind`: the JNI layer relies on `catch_unwind`.
+- Reproducible libraries: NoSpam passes `--remap-path-prefix` (through `CARGO_ENCODED_RUSTFLAGS`)
+  for `CARGO_HOME`, the workspace and the target directory, because cargo's `trim-paths` is not
+  stable yet. Builds in two different folders gave byte-identical libraries.
+- Toolchain: NDK 29.0.14206865 (preinstalled on GitHub's ubuntu-24.04 runner), cargo-ndk 4.1.2,
+  and the core's `rust-toolchain.toml` (Rust 1.97.1) as it is.
+- Cold model load on the Galaxy A26 (release build, background cold start, median of 5): 1.54 s
+  with the old Kotlin hazm port, 1.15 s with the Rust core. The first classification then takes
+  about 0.28 s more while the core compiles its rules.
+- NoSpam shows hazm's MIT notice, with the crates' own license texts, under Settings → About →
+  Open-source licenses.
+
 ### Phase 4: cleanup
 
 This repo's part is done:
@@ -296,7 +322,8 @@ This repo's part is done:
 - `LICENSE` (GPL-3.0), a dataset description and the Rust requirement in the README, a `core/README.md`,
   and `CLAUDE.md` and the folder READMEs corrected.
 
-NoSpam's part is in Phase 3b: its README build section (draft below), `CLAUDE.md` and the design page.
+NoSpam's part is in Phase 3b: its README build section (draft below) and `CLAUDE.md`. The design
+page (private, on claude.ai) was updated to the as-built architecture on 2026-10-17.
 
 Phase 3a results (2026-10-14): `spam-core-jni` exports the four functions with `-Xcheck:jni` tests
 through a JVM started on the host (needs a JDK; skipped with a note otherwise). The model file carries
@@ -403,7 +430,7 @@ for n in 2..=4 slide a window, and a word shorter than n gives one window and en
   workflow with `cargo test`, pytest, and `cargo ndk build` to catch cross-compile breakage.
 - NoSpam's workflows (`android.yml`, `release.yml`): check out with submodules, install the
   Rust toolchain from `rust-toolchain.toml`, the Android targets and `cargo-ndk`, and cache
-  `~/.cargo` and `target/`. The NDK version is pinned in `core/ml/build.gradle.kts`.
+  `~/.cargo` and `target/`. The NDK version is pinned as `ndk` in NoSpam's `gradle/libs.versions.toml`.
 
 ## Revisit these decisions if
 
@@ -430,4 +457,7 @@ message, often pieces of names. Measured on 2026-10-14 (v5 pipeline, TF-IDF, not
   one message (~23,900 when trained on all data). 5 is unclear (CV better, test set worse).
 - Changing it does not change the pipeline (no `PIPELINE_VERSION` bump), only the model
   file: set `min_df` in `classic/baseline_tfidf.py`, retrain, re-export.
-- Decide before the repos are published; the user wants to think about it first.
+- The v5 model NoSpam ships (Phase 3b) was exported with `min_df=1`, so its published weights
+  include the single-message n-grams, and NoSpam's git history keeps them. Switching now would
+  keep such n-grams out of future models only.
+- Still open: the user decides later, before a future model export.
